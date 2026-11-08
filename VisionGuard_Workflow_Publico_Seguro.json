@@ -1,0 +1,684 @@
+{
+  "name": "VisionGuard - Industrial Quality Control (Public Template)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "295b38f8-6fe8-4a3b-80cd-8f3f3470d059",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": "Inspecciones_Pendientes",
+        "filter": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "d9c7a6ae-7c8c-4be1-a93a-aa0b979163a7",
+      "name": "Search files and folders"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "=\n{{ \"'\" + $json.id + \"' in parents and trashed = false and mimeType contains 'image/'\" }}\n",
+        "filter": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        896,
+        0
+      ],
+      "id": "1e7d95ff-f001-4aa8-9adf-989e77c183e7",
+      "name": "Search files and folders1"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "0e0b1fb4-46ba-49df-be84-fd029d06a28a",
+      "name": "Download file"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-INFERENCE-API.example.com/predict",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "c64eb3cd-e643-46da-a35c-bc67e7f4f4e7",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Actúa como un asistente de control de calidad industrial especializado en inspección de piezas metálicas.\n\nRecibirás resultados de un modelo de visión artificial ResNet18. No tienes acceso directo a la imagen, por lo que debes basarte exclusivamente en los datos entregados.\n\nDATOS DE INSPECCIÓN:\nArchivo: {{ $json.archivo }}\nClasificación: {{ $json.clasificacion }}\nConfianza: {{ $json.confianza }}\nProbabilidad de defecto: {{ $json.probabilidades.defectuosa }}\nDecisión sugerida: {{ $json.decision_sugerida }}\nRequiere revisión humana: {{ $json.requiere_revision_humana }}\n\nOBJETIVO:\nGenera un diagnóstico industrial que incluya diagnóstico, recomendación, prioridad, justificación y necesidad de revisión humana.\n\nREGLAS:\n1. Si la pieza está clasificada como Defectuosa, recomienda apartarla para inspección.\n2. Si requiere revisión humana, indica que no debe aprobarse automáticamente y asigna prioridad alta.\n3. Si está clasificada como Correcta con alta confianza y no requiere revisión, asigna prioridad baja y recomienda validación según el protocolo de calidad.\n4. No inventes tipos de defectos, causas ni observaciones visuales.\n5. Nunca presentes una predicción automatizada como aprobación definitiva.\n6. Respeta la clasificación del modelo e indica la incertidumbre cuando corresponda.\n\nRESPONDE ÚNICAMENTE CON UN OBJETO JSON VÁLIDO, SIN MARKDOWN NI TEXTO ADICIONAL, CON ESTAS CLAVES:\narchivo, clasificacion, confianza, diagnostico, prioridad, recomendacion, justificacion, requiere_revision_humana.\n\nprioridad debe ser baja, media o alta. confianza debe ser un número y requiere_revision_humana debe ser booleano."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "2e7e22fc-0da8-4079-8ae3-a2f9bac73eed",
+      "name": "Message a model"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Hoja 1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "fecha_hora ": "={{ $now.setZone('America/Santiago').toFormat('yyyy-MM-dd HH:mm:ss') }}",
+            " archivo": "={{ $json.output[0].content[0].text.archivo }}",
+            "clasificacion": "={{ $json.output[0].content[0].text.clasificacion }}",
+            "confianza": "={{ $json.output[0].content[0].text.confianza }}",
+            "diagnostico": "={{ $json.output[0].content[0].text.diagnostico }}",
+            "prioridad": "={{ $json.output[0].content[0].text.prioridad }}",
+            "recomendacion": "={{ $json.output[0].content[0].text.recomendacion }}",
+            "justificacion": "={{ $json.output[0].content[0].text.justificacion }}",
+            "requiere_revision_humana": "={{ $json.output[0].content[0].text.requiere_revision_humana }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "fecha_hora ",
+              "displayName": "fecha_hora ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": " archivo",
+              "displayName": " archivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "clasificacion",
+              "displayName": "clasificacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confianza",
+              "displayName": "confianza",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "diagnostico",
+              "displayName": "diagnostico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prioridad",
+              "displayName": "prioridad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recomendacion",
+              "displayName": "recomendacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "justificacion",
+              "displayName": "justificacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requiere_revision_humana",
+              "displayName": "requiere_revision_humana",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1936,
+        0
+      ],
+      "id": "a926e32b-1ed3-4c53-9a7f-521926bd4b9d",
+      "name": "Append row in sheet",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "25571eb0-8e76-4d78-82e7-d3ed7fa8a5ea",
+              "leftValue": "={{ $json.clasificacion === 'Defectuosa' || $json.requiere_revision_humana === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        2160,
+        0
+      ],
+      "id": "0ee1cb8f-9f14-4138-bd2b-87de295be9fc",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "inspector@example.com",
+        "subject": "={{ '⚠️ VisionGuard | ' + $json[Object.keys($json).find(k => k.trim() === 'archivo')] + ' | ' + ($json.clasificacion === 'Defectuosa' ? 'PIEZA DEFECTUOSA' : 'REVISIÓN HUMANA') }}",
+        "message": "={{ (() => {\n  const d = Object.fromEntries(\n    Object.entries($json).map(([k, v]) => [k.trim(), v])\n  );\n\n  return `\n    <h2>⚠️ ALERTA DE CALIDAD - VISIONGUARD</h2>\n    <p><b>Archivo:</b> ${d.archivo}</p>\n    <p><b>Clasificación:</b> ${d.clasificacion}</p>\n    <p><b>Confianza:</b> ${(Number(d.confianza) * 100).toFixed(2)}%</p>\n    <p><b>Prioridad:</b> ${d.prioridad}</p>\n    <h3>Diagnóstico</h3>\n    <p>${d.diagnostico}</p>\n    <h3>Recomendación</h3>\n    <p>${d.recomendacion}</p>\n    <h3>Justificación</h3>\n    <p>${d.justificacion}</p>\n    <p><b>Requiere revisión humana:</b>\n    ${String(d.requiere_revision_humana).toLowerCase() === 'true' ? 'Sí' : 'No'}</p>\n    <hr>\n    <p><i>Resultado automatizado. Confirmar mediante el protocolo de inspección humana.</i></p>\n  `;\n})() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2384,
+        -96
+      ],
+      "id": "13cc05f8-8c85-4056-bfbc-7549478b0384",
+      "name": "Send a message"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Search files and folders1').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_PROCESSED_FOLDER_ID",
+          "mode": "id"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2608,
+        -96
+      ],
+      "id": "73c2432d-6881-4eb7-b438-30584dbcb6e0",
+      "name": "Move file"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Search files and folders1').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_PROCESSED_FOLDER_ID",
+          "mode": "id"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2384,
+        96
+      ],
+      "id": "30b880b5-0d5f-41c7-997d-81774544c1c0",
+      "name": "Move file1"
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR-INFERENCE-API.example.com/health",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "c74143bf-9733-4eb8-a3e1-132da21805dd",
+      "name": "HTTP Request1",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "5fd63312-1a87-4263-88c1-5595c4b2e6f9",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        448,
+        0
+      ],
+      "id": "486d143c-d5b5-4ce7-b4ce-f2e71431608b",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "amount": 60
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        272,
+        208
+      ],
+      "id": "b275a48e-f333-4889-b74c-e6bb51a69ede",
+      "name": "Wait"
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR-INFERENCE-API.example.com/health",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        288,
+        448
+      ],
+      "id": "90c53542-f485-4ebc-97e5-3710460883a0",
+      "name": "HTTP Request2",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "28efe146-efec-4b3d-9b2c-9d5947ab331a",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        464,
+        448
+      ],
+      "id": "3d6fe157-6b87-4180-80ee-a556b3b9ef70",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "sendTo": "inspector@example.com",
+        "subject": "🚨 VisionGuard | ERROR CRÍTICO - API NO DISPONIBLE",
+        "message": " <h2>🚨 ALERTA DE SISTEMA - VISIONGUARD</h2>  <p><b>Estado:</b> API de inferencia no disponible.</p> <p><b>Servicio:</b> ResNet18 ONNX en Render.</p>  <p><b>Incidente:</b> La verificación inicial falló y la segunda comprobación, realizada después de 60 segundos, tampoco devolvió un estado OK.</p>  <p><b>Impacto:</b> Las inspecciones no fueron procesadas durante esta ejecución.</p>  <p><b>Acción recomendada:</b> Revisar el estado de Render y ejecutar nuevamente el flujo cuando el servicio esté disponible.</p>  <p><b>Verificar API:</b> https://YOUR-INFERENCE-API.example.com/health</p>  <hr> <p><i>Notificación automática de VisionGuard Industrial.</i></p>   ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        736,
+        464
+      ],
+      "id": "88acace6-61a9-4adb-b5aa-465851ac947e",
+      "name": "Send a message1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders1": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Move file1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Move file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
