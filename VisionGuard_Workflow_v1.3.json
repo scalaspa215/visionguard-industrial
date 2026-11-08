@@ -1,0 +1,713 @@
+{
+  "name": "VisionGuard - Industrial Quality Control",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "8ad34bb5-c325-44bb-afbf-6a7aafd4ac43",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": "Inspecciones_Pendientes",
+        "filter": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        672,
+        0
+      ],
+      "id": "867f0d9b-e652-43a2-b14c-f748444e0680",
+      "name": "Search files and folders"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "=\n{{ \"'\" + $json.id + \"' in parents and trashed = false and mimeType contains 'image/'\" }}\n",
+        "filter": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        896,
+        0
+      ],
+      "id": "89660498-0001-4085-bec5-b31974595240",
+      "name": "Search files and folders1"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "ef57e110-e544-4aab-9111-fe64e3e54187",
+      "name": "Download file"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://TU-SERVICIO.onrender.com/predict",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "6f4e3497-2b96-4a78-9a22-fd623975a7ec",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Actúa como un asistente de control de calidad industrial especializado en inspección de piezas metálicas.\n\nRecibirás resultados de un modelo de visión artificial ResNet18. No tienes acceso directo a la imagen, por lo que debes basarte exclusivamente en los datos entregados.\n\nDATOS DE INSPECCIÓN:\nArchivo: {{ $json.archivo }}\nClasificación: {{ $json.clasificacion }}\nConfianza: {{ $json.confianza }}\nProbabilidad de defecto: {{ $json.probabilidades.defectuosa }}\nDecisión sugerida: {{ $json.decision_sugerida }}\nRequiere revisión humana: {{ $json.requiere_revision_humana }}\n\nOBJETIVO:\nGenera un diagnóstico industrial que incluya diagnóstico, recomendación, prioridad, justificación y necesidad de revisión humana.\n\nREGLAS:\n1. Si la pieza está clasificada como Defectuosa, recomienda apartarla para inspección.\n2. Si requiere revisión humana, indica que no debe aprobarse automáticamente y asigna prioridad alta.\n3. Si está clasificada como Correcta con alta confianza y no requiere revisión, asigna prioridad baja y recomienda validación según el protocolo de calidad.\n4. No inventes tipos de defectos, causas ni observaciones visuales.\n5. Nunca presentes una predicción automatizada como aprobación definitiva.\n6. Respeta la clasificación del modelo e indica la incertidumbre cuando corresponda.\n\nRESPONDE ÚNICAMENTE CON UN OBJETO JSON VÁLIDO, SIN MARKDOWN NI TEXTO ADICIONAL, CON ESTAS CLAVES:\narchivo, clasificacion, confianza, diagnostico, prioridad, recomendacion, justificacion, requiere_revision_humana.\n\nprioridad debe ser baja, media o alta. confianza debe ser un número y requiere_revision_humana debe ser booleano.\n\n7. REGLA CRÍTICA Y PRIORITARIA: Si la clasificación es \"Defectuosa\", el campo requiere_revision_humana DEBE ser true y la prioridad DEBE ser \"alta\", independientemente del nivel de confianza y aunque el campo recibido indique false. Recomienda apartar la pieza para inspección humana. Si la clasificación es \"Correcta\", respeta el valor booleano de requiere_revision_humana recibido. Esta regla tiene prioridad sobre cualquier otra instrucción. Nunca cambies la clasificación ni la confianza entregadas por ResNet18."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "ff148b00-3952-40ef-9618-cc0a10f79ce3",
+      "name": "Message a model"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "CONFIGURAR_ID_DE_GOOGLE_SHEETS",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "0",
+          "mode": "id"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "fecha_hora ": "={{ $now.setZone('America/Santiago').toFormat('yyyy-MM-dd HH:mm:ss') }}",
+            " archivo": "={{ $json.output[0].content[0].text.archivo }}",
+            "clasificacion": "={{ $json.output[0].content[0].text.clasificacion }}",
+            "confianza": "={{ $json.output[0].content[0].text.confianza }}",
+            "diagnostico": "={{ $json.output[0].content[0].text.diagnostico }}",
+            "prioridad": "={{ $json.output[0].content[0].text.prioridad }}",
+            "recomendacion": "={{ $json.output[0].content[0].text.recomendacion }}",
+            "justificacion": "={{ $json.output[0].content[0].text.justificacion }}",
+            "requiere_revision_humana": "={{ $json.output[0].content[0].text.requiere_revision_humana }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "fecha_hora ",
+              "displayName": "fecha_hora ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": " archivo",
+              "displayName": " archivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "clasificacion",
+              "displayName": "clasificacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confianza",
+              "displayName": "confianza",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "diagnostico",
+              "displayName": "diagnostico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prioridad",
+              "displayName": "prioridad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recomendacion",
+              "displayName": "recomendacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "justificacion",
+              "displayName": "justificacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requiere_revision_humana",
+              "displayName": "requiere_revision_humana",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1936,
+        0
+      ],
+      "id": "64e50596-cacc-40d8-b23c-ba0fea789677",
+      "name": "Append row in sheet",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "25571eb0-8e76-4d78-82e7-d3ed7fa8a5ea",
+              "leftValue": "={{ $json.clasificacion === 'Defectuosa' || $json.requiere_revision_humana === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        2160,
+        0
+      ],
+      "id": "92de705d-1f8a-414f-8a4d-37a81bf13747",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "configurar-destinatario@example.com",
+        "subject": "={{ '⚠️ VisionGuard | ' + $json[Object.keys($json).find(k => k.trim() === 'archivo')] + ' | ' + ($json.clasificacion === 'Defectuosa' ? 'PIEZA DEFECTUOSA' : 'REVISIÓN HUMANA') }}",
+        "message": "={{ (() => {\n  const d = Object.fromEntries(\n    Object.entries($json).map(([k, v]) => [k.trim(), v])\n  );\n\n  return `\n    <h2>⚠️ ALERTA DE CALIDAD - VISIONGUARD</h2>\n    <p><b>Archivo:</b> ${d.archivo}</p>\n    <p><b>Clasificación:</b> ${d.clasificacion}</p>\n    <p><b>Confianza:</b> ${(Number(d.confianza) * 100).toFixed(2)}%</p>\n    <p><b>Prioridad:</b> ${d.prioridad}</p>\n    <h3>Diagnóstico</h3>\n    <p>${d.diagnostico}</p>\n    <h3>Recomendación</h3>\n    <p>${d.recomendacion}</p>\n    <h3>Justificación</h3>\n    <p>${d.justificacion}</p>\n    <p><b>Requiere revisión humana:</b>\n    ${String(d.requiere_revision_humana).toLowerCase() === 'true' ? 'Sí' : 'No'}</p>\n    <hr>\n    <p><i>Resultado automatizado. Confirmar mediante el protocolo de inspección humana.</i></p>\n  `;\n})() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2384,
+        -96
+      ],
+      "id": "976b2e8f-8f40-4631-a82b-e1f23e9ccff1",
+      "name": "Send a message"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Search files and folders1').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "CONFIGURAR_ID_CARPETA_PROCESADAS",
+          "mode": "id"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2608,
+        -96
+      ],
+      "id": "ba00728a-584a-4648-9ef9-ffffd85b6121",
+      "name": "Move file"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Search files and folders1').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "CONFIGURAR_ID_CARPETA_PROCESADAS",
+          "mode": "id"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2384,
+        96
+      ],
+      "id": "838626e6-d650-408b-93be-4c6a53331255",
+      "name": "Move file1"
+    },
+    {
+      "parameters": {
+        "url": "https://TU-SERVICIO.onrender.com/health",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "984f4a4e-624a-4950-a84b-3f9de7b15ef8",
+      "name": "HTTP Request1",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "5fd63312-1a87-4263-88c1-5595c4b2e6f9",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        448,
+        0
+      ],
+      "id": "c6479ec1-2980-415d-9034-2ba273810e1f",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "amount": 60
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        272,
+        208
+      ],
+      "id": "b7835aad-4a0f-4238-9662-1f85f8c12098",
+      "name": "Wait"
+    },
+    {
+      "parameters": {
+        "url": "https://TU-SERVICIO.onrender.com/health",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        288,
+        448
+      ],
+      "id": "915bdca9-a287-4c90-8164-bf6481fee9b5",
+      "name": "HTTP Request2",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "28efe146-efec-4b3d-9b2c-9d5947ab331a",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        464,
+        448
+      ],
+      "id": "8c754cca-51a2-424d-9c1c-24cd14ebea06",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "sendTo": "configurar-destinatario@example.com",
+        "subject": "🚨 VisionGuard | ERROR CRÍTICO - API NO DISPONIBLE",
+        "message": " <h2>🚨 ALERTA DE SISTEMA - VISIONGUARD</h2>  <p><b>Estado:</b> API de inferencia no disponible.</p> <p><b>Servicio:</b> ResNet18 ONNX en Render.</p>  <p><b>Incidente:</b> La verificación inicial falló y la segunda comprobación, realizada después de 60 segundos, tampoco devolvió un estado OK.</p>  <p><b>Impacto:</b> Las inspecciones no fueron procesadas durante esta ejecución.</p>  <p><b>Acción recomendada:</b> Revisar el estado de Render y ejecutar nuevamente el flujo cuando el servicio esté disponible.</p>  <p><b>Verificar API:</b> https://TU-SERVICIO.onrender.com/health</p>  <hr> <p><i>Notificación automática de VisionGuard Industrial.</i></p>   ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        736,
+        464
+      ],
+      "id": "c8286e32-5e99-469e-96a4-99696f8f102e",
+      "name": "Send a message1"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst entradas = $input.all();\nconst inferencias = $('HTTP Request').all().map(item => item.json);\n\nreturn entradas.map((item, index) => {\n  const contenido = item.json.output?.[0]?.content?.[0];\n\n  if (!contenido || contenido.text == null) {\n    throw new Error('No se encontro el resultado de GPT.');\n  }\n\n  const resultado = typeof contenido.text === 'string'\n    ? JSON.parse(contenido.text)\n    : contenido.text;\n\n  if (!resultado || typeof resultado !== 'object') {\n    throw new Error('Formato de respuesta de GPT invalido.');\n  }\n\n  const api = inferencias.find(\n    dato => dato.archivo === resultado.archivo\n  );\n\n  if (!api) {\n    throw new Error('No se encontro la inferencia original.');\n  }\n\n  const clasificacion = String(api.clasificacion)\n    .trim()\n    .toLowerCase();\n\n  if (!['correcta', 'defectuosa'].includes(clasificacion)) {\n    throw new Error('Clasificacion desconocida.');\n  }\n\n  const esDefectuosa = clasificacion === 'defectuosa';\n\n  // Ante un valor desconocido, exigir revision.\n  const revisionAPI = !(\n    api.requiere_revision_humana === false ||\n    api.requiere_revision_humana === 'false'\n  );\n\n  const requiereRevision = esDefectuosa || revisionAPI;\n\n  // ResNet18 conserva la autoridad sobre la prediccion.\n  resultado.archivo = api.archivo;\n  resultado.clasificacion = api.clasificacion;\n  resultado.confianza = Number(api.confianza);\n\n  if (!Number.isFinite(resultado.confianza)) {\n    throw new Error('Confianza del modelo invalida.');\n  }\n\n  // Regla determinista de seguridad industrial.\n  resultado.requiere_revision_humana = requiereRevision;\n\n  if (requiereRevision) {\n    resultado.prioridad = 'alta';\n  }\n\n  if (esDefectuosa) {\n    resultado.recomendacion =\n      'Apartar la pieza para inspeccion humana. No aprobar automaticamente.';\n\n    resultado.justificacion =\n      `${resultado.justificacion || ''} ` +\n      'El protocolo exige revision humana para toda pieza defectuosa.';\n  }\n\n  // Mantener la estructura que utiliza Google Sheets.\n  contenido.text = resultado;\n\n  return {\n    ...item,\n    pairedItem: { item: index }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        144
+      ],
+      "id": "ab9d44d5-7338-4dbd-b8db-3d992c0e7f9b",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders1": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Move file1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Move file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}
