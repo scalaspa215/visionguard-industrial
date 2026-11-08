@@ -1,7 +1,7 @@
 # VisionGuard Industrial
 ### AI-Powered Industrial Quality Control System
 
-**Versión:** 1.3 — Industrial Safety Validation  
+**Versión:** 1.4 — Telegram Integration & Industrial Safety Validation 
 **Proyecto académico:** IA Generativa para la Gestión Industrial  
 **Estado:** Prototipo funcional validado mediante pruebas de integración
 
@@ -171,3 +171,37 @@ Los resultados experimentales de ResNet18 y las pruebas integrales de n8n respal
 ---
 
 **VisionGuard Industrial v1.3 — Prototipo académico de control de calidad asistido por inteligencia artificial.**
+
+
+
+
+## 12. Actualización v1.4 — Telegram Integration
+
+**Fecha:** 8 de noviembre de 2026
+
+### Nuevas funcionalidades
+- Integración de Telegram Bot API mediante n8n.
+- Envío automático de resultados de inspección por Telegram.
+- Notificaciones Gmail para piezas defectuosas o que requieren revisión humana.
+- Validación determinista de seguridad mediante JavaScript.
+- Registro de inspecciones en Google Sheets.
+- Movimiento automático de imágenes procesadas en Google Drive.
+
+### Prueba de integración
+Archivo: VG_TEST_009.jpeg
+
+- Clasificación: Defectuosa.
+- Confianza: 99,63 %.
+- Prioridad: Alta.
+- Revisión humana: Sí.
+- Telegram: mensaje recibido correctamente.
+- Gmail: correo de alerta recibido.
+- Google Sheets: resultado registrado.
+- Google Drive: imagen trasladada a Inspecciones_Procesadas.
+
+### Workflow
+El archivo `VisionGuard_Workflow_v1.4_PUBLICO_SEGURO.json` contiene la versión exportada para documentación y reproducción académica, sin credenciales privadas.
+
+### Limitaciones
+VisionGuard es un prototipo académico. Sus predicciones no sustituyen la inspección humana ni constituyen aprobaciones definitivas de calidad.
+
