@@ -3,20 +3,70 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-st.set_page_config(page_title="VisionGuard Industrial", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="VisionGuard Industrial — Control Center", page_icon="🛡️", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-.stApp {background:#090f1c;color:#e9f3ff}
-[data-testid="stSidebar"] {background:#101c2c}
-.block-container {padding-top:1.3rem;max-width:1450px}
-[data-testid="stMetric"] {background:linear-gradient(135deg,#17273d,#101a2a);border:1px solid #2e415b;border-radius:15px;padding:15px}
-[data-testid="stMetricLabel"] {color:#9ebbd8}
-[data-testid="stMetricValue"] {color:#fff}
-.hero {background:linear-gradient(115deg,#173657,#101b2f);padding:22px 26px;border:1px solid #325773;border-radius:16px;margin-bottom:22px}
-.hero h1 {color:#fff;margin:3px 0;font-size:2.1rem}
-.hero p {color:#adc9e6;margin-bottom:0}
-.eyebrow {letter-spacing:2px;font-size:12px;color:#48d6df;font-weight:700}
+/* VisionGuard v2.2 — legibilidad primero: blanco, azul marino y coral */
+:root {--ink:#17283f;--muted:#5d6f89;--accent:#3557bd;--line:#dce5f1;--paper:#f4f7fb;}
+html, body, .stApp, [data-testid="stAppViewContainer"] {
+  background:#f4f7fb !important; color:#17283f !important;
+}
+[data-testid="stHeader"] {background:rgba(244,247,251,.94) !important;}
+.block-container {padding-top:1.2rem;max-width:1460px;padding-bottom:2.5rem;}
+[data-testid="stSidebar"] {background:#ffffff !important;border-right:1px solid #e1e7f0;}
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] {color:#17283f !important;}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {color:#60748f !important;}
+[data-testid="stSidebar"] [data-testid="stAlert"] {background:#edf3fb !important;border:1px solid #c9d9f2 !important;}
+[data-testid="stSidebar"] [data-testid="stAlert"] * {color:#29456a !important;}
+[data-testid="stMetric"] {
+  background:#ffffff !important;border:1px solid #e0e7f1 !important;
+  border-radius:16px !important;padding:20px 19px !important;
+  box-shadow:0px 8px 24px rgba(33,56,86,.055);
+}
+[data-testid="stMetricLabel"] p {color:#566d89 !important;font-weight:600 !important;font-size:.89rem !important;}
+[data-testid="stMetricValue"] {color:#142944 !important;font-weight:750 !important;}
+[data-testid="stMetricDelta"] {color:#2563a2 !important;}
+[data-testid="stMain"] h2, [data-testid="stMain"] h3, [data-testid="stMain"] p,
+[data-testid="stMain"] label {color:#203550;}
+[data-testid="stMain"] h3 {font-weight:750;}
+[data-testid="stMain"] [data-testid="stCaptionContainer"] p {color:#61738b !important;}
+.hero {
+  background:linear-gradient(112deg,#152d4d 0%, #19385e 68%, #28517a 100%);
+  padding:28px 32px;border:1px solid #294e76;border-radius:18px;
+  box-shadow:0 10px 28px rgba(18,43,76,.13);margin-bottom:20px;
+}
+.hero h1 {color:#fff !important;margin:6px 0 8px 0;font-size:2.15rem;line-height:1.2;font-weight:800;}
+.hero p {color:#dce8f6 !important;margin:0;font-size:1rem;}
+.eyebrow {letter-spacing:2px;font-size:11px;color:#ffbf83 !important;font-weight:800;}
+.stTabs [data-baseweb="tab-list"] {gap:8px;border-bottom:1px solid #d8e1ed;padding-bottom:5px;flex-wrap:wrap;}
+.stTabs [data-baseweb="tab"] {
+  background:#ffffff !important;border:1px solid #dae3ef !important;
+  border-radius:11px !important;padding:9px 13px;color:#29415e !important;
+}
+.stTabs [data-baseweb="tab"] p {color:#29415e !important;font-weight:650 !important;}
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+  background:#e9f0ff !important;border-color:#b8c9fa !important;
+}
+.stTabs [data-baseweb="tab"][aria-selected="true"] p {color:#264ba4 !important;}
+.stTabs [data-baseweb="tab-highlight"] {background-color:#3557bd !important;}
+[data-testid="stInfo"] {background:#ebf2ff !important;}
+[data-testid="stAlert"] {border-radius:12px !important;}
+[data-testid="stDataFrame"], [data-testid="stPlotlyChart"] {
+  background:#fff;border-radius:12px;
+}
+[data-testid="stVerticalBlockBorderWrapper"] {border-color:#dee7f1 !important;}
+[data-testid="stSelectbox"] [data-baseweb="select"],
+[data-testid="stMultiSelect"] [data-baseweb="select"] {color:#1d3250 !important;}
+[data-testid="stSidebar"] [data-baseweb="tag"] {background:#e8efff !important;}
+[data-testid="stSidebar"] [data-baseweb="tag"] * {color:#204180 !important;}
+[data-testid="stMain"] [data-testid="stMarkdownContainer"] a {color:#2a54b0 !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -68,15 +118,15 @@ def normalize(raw):
 
 
 def style_chart(fig, height=320):
-    fig.update_layout(height=height, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                      font=dict(color='#dbe8fa'), margin=dict(l=14, r=14, t=16, b=15),
+    fig.update_layout(height=height, paper_bgcolor='#ffffff', plot_bgcolor='#ffffff',
+                      font=dict(color='#263b56', size=13), margin=dict(l=14, r=14, t=16, b=15),
                       legend=dict(orientation='h', y=-.24))
-    fig.update_xaxes(gridcolor='#293b56')
-    fig.update_yaxes(gridcolor='#293b56')
+    fig.update_xaxes(gridcolor='#e7edf5')
+    fig.update_yaxes(gridcolor='#e7edf5')
     return fig
 
 
-st.sidebar.title('🛡️ VisionGuard')
+st.sidebar.title('🛡️ VisionGuard Industrial')
 st.sidebar.caption('AI QUALITY CONTROL · CONTROL CENTER')
 # Importante: los secretos se configuran SOLO en Streamlit, nunca en el repositorio público.
 try:
@@ -120,7 +170,7 @@ if not df.empty:
     selected_p = st.sidebar.multiselect('Filtrar por prioridad', priorities, default=priorities)
     df = df[df['prioridad'].isin(selected_p)]
 
-st.markdown('''<div class="hero"><div class="eyebrow">VISIONGUARD INDUSTRIAL · v2.1</div>
+st.markdown('''<div class="hero"><div class="eyebrow">VISIONGUARD INDUSTRIAL · v2.2</div>
 <h1>Centro de Control Inteligente</h1><p>Visión artificial · GRU · NLP · IA generativa · Supervisión humana</p></div>''', unsafe_allow_html=True)
 
 if source == 'Demostración':
@@ -150,12 +200,12 @@ with t1:
         st.subheader('Clasificación de piezas')
         vc = df['clasificacion'].value_counts().rename_axis('clase').reset_index(name='n')
         fig = px.pie(vc, names='clase', values='n', hole=.62,
-                     color_discrete_sequence=['#20cbd1', '#f1b75c', '#7099ef'])
+                     color_discrete_sequence=['#d6605d', '#258c7a', '#5875c9'])
         st.plotly_chart(style_chart(fig), use_container_width=True)
     with b:
         st.subheader('Prioridad de inspección')
         vc = df['prioridad'].value_counts().rename_axis('prioridad').reset_index(name='n')
-        fig = px.bar(vc, x='prioridad', y='n', color='prioridad', color_discrete_sequence=['#20cbd1','#7099ef','#f1b75c'])
+        fig = px.bar(vc, x='prioridad', y='n', color='prioridad', color_discrete_sequence=['#d9864c','#496bb7','#268f82'])
         st.plotly_chart(style_chart(fig), use_container_width=True)
     st.caption('Los porcentajes se calculan sobre el historial filtrado, no sobre la producción total de una fábrica.')
 
@@ -169,7 +219,8 @@ with t2:
     d.metric('F1-score defectuosa', '98,21%')
     cm = pd.DataFrame([[259,3],[13,440]], index=['Real correcta','Real defectuosa'],
                       columns=['Pred. correcta','Pred. defectuosa'])
-    fig = px.imshow(cm, text_auto=True, color_continuous_scale=['#12253a','#1fd0c7'])
+    fig = px.imshow(cm, text_auto=True, color_continuous_scale=['#f2f5fd','#3865b4'])
+    fig.update_traces(textfont=dict(color='#152844', size=16))
     st.plotly_chart(style_chart(fig, 350), use_container_width=True)
     st.subheader('NLP integrado')
     count_nlp = int(df['casos_nlp'].max()) if df['casos_nlp'].notna().any() else 0
@@ -183,7 +234,7 @@ with t3:
     if not pred.empty:
         grouped = pred.groupby('linea_mayor_pronostico', as_index=False)['pronostico_max_pct'].mean()
         fig = px.bar(grouped, x='linea_mayor_pronostico', y='pronostico_max_pct', color='linea_mayor_pronostico',
-                     color_discrete_sequence=['#20cbd1','#749bf5','#ecb45f'])
+                     color_discrete_sequence=['#4767bd','#d9864c','#258c7a'])
         fig.update_layout(xaxis_title='Línea de mayor pronóstico',yaxis_title='Pronóstico (%)')
         st.plotly_chart(style_chart(fig), use_container_width=True)
     st.markdown('**Comparación de referencia de la API académica (/pronosticos-demo, 2026-10-28)**')
@@ -199,7 +250,7 @@ with t4:
     b.metric('Acciones rechazadas', rejected)
     c.metric('Pendientes de revisión', int((~df['validacion_humana_realizada']).sum()))
     vc = df['estado'].value_counts().rename_axis('estado').reset_index(name='inspecciones')
-    fig = px.bar(vc, x='inspecciones', y='estado', orientation='h', color_discrete_sequence=['#1bc7d0'])
+    fig = px.bar(vc, x='inspecciones', y='estado', orientation='h', color_discrete_sequence=['#486ab8'])
     st.plotly_chart(style_chart(fig, 315), use_container_width=True)
     st.caption('Autorizar una acción NO equivale a certificar que la pieza esté libre de defectos.')
 
@@ -218,4 +269,4 @@ with t5:
     st.write(row['recomendacion'] if pd.notna(row['recomendacion']) else 'No disponible en esta fuente')
 
 st.divider()
-st.caption('VisionGuard Industrial · Prototipo académico. La IA apoya el control de calidad y no sustituye la decisión humana.')
+st.caption('VisionGuard Industrial · Prototipo académico. Los pronósticos GRU se basan en datos simulados; las decisiones críticas requieren supervisión humana.')
