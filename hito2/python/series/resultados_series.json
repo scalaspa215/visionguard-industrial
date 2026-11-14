@@ -1,0 +1,111 @@
+{
+  "datos": "SIMULADOS_ACADEMICOS",
+  "horizonte_dias": 1,
+  "metricas": [
+    {
+      "conjunto": "val",
+      "modelo": "Ingenuo",
+      "MAE_pp": 1.7849,
+      "RMSE_pp": 2.2676,
+      "n": 81
+    },
+    {
+      "conjunto": "val",
+      "modelo": "Promedio movil 7d",
+      "MAE_pp": 1.5707,
+      "RMSE_pp": 1.9919,
+      "n": 81
+    },
+    {
+      "conjunto": "val",
+      "modelo": "SES",
+      "MAE_pp": 1.4867,
+      "RMSE_pp": 1.9056,
+      "n": 81
+    },
+    {
+      "conjunto": "val",
+      "modelo": "Holt",
+      "MAE_pp": 1.6919,
+      "RMSE_pp": 2.1649,
+      "n": 81
+    },
+    {
+      "conjunto": "val",
+      "modelo": "Holt-Winters 7d",
+      "MAE_pp": 1.4067,
+      "RMSE_pp": 1.8253,
+      "n": 81
+    },
+    {
+      "conjunto": "val",
+      "modelo": "Regresion lag+semana",
+      "MAE_pp": 1.4738,
+      "RMSE_pp": 1.8982,
+      "n": 81
+    },
+    {
+      "conjunto": "val",
+      "modelo": "GRU",
+      "MAE_pp": 1.5464,
+      "RMSE_pp": 1.9812,
+      "n": 81
+    },
+    {
+      "conjunto": "test",
+      "modelo": "Ingenuo",
+      "MAE_pp": 2.0543,
+      "RMSE_pp": 2.5263,
+      "n": 81
+    },
+    {
+      "conjunto": "test",
+      "modelo": "Promedio movil 7d",
+      "MAE_pp": 1.6167,
+      "RMSE_pp": 1.9631,
+      "n": 81
+    },
+    {
+      "conjunto": "test",
+      "modelo": "SES",
+      "MAE_pp": 1.5666,
+      "RMSE_pp": 1.9043,
+      "n": 81
+    },
+    {
+      "conjunto": "test",
+      "modelo": "Holt",
+      "MAE_pp": 1.7463,
+      "RMSE_pp": 2.1366,
+      "n": 81
+    },
+    {
+      "conjunto": "test",
+      "modelo": "Holt-Winters 7d",
+      "MAE_pp": 1.5988,
+      "RMSE_pp": 1.9789,
+      "n": 81
+    },
+    {
+      "conjunto": "test",
+      "modelo": "Regresion lag+semana",
+      "MAE_pp": 1.7167,
+      "RMSE_pp": 2.1946,
+      "n": 81
+    },
+    {
+      "conjunto": "test",
+      "modelo": "GRU",
+      "MAE_pp": 1.7666,
+      "RMSE_pp": 2.2623,
+      "n": 81
+    }
+  ],
+  "cusum": {
+    "linea": "L2",
+    "cambio_real_dia": 120,
+    "alarma_dia": 124,
+    "retardo_dias": 4,
+    "parametros": "k=0.5 sigma, h=5 sigma; referencia dias 0-99"
+  }
+}

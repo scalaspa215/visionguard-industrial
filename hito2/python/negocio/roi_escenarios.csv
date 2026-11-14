@@ -1,0 +1,4 @@
+escenario,horas_ahorradas_mes,escapes_evitados_mes,beneficio_anual_clp,costo_operacion_anual_clp,implementacion_clp,costo_total_anio1_clp,roi_anio1_pct,roi_anio2_pct,recuperacion_meses
+Conservador,20,2,3480000,1797600,1500000,3297600,5.5,93.6,10.7
+Base,15.9,4,4501224,1797600,1500000,3297600,36.5,150.4,6.7
+Optimista,60,8,11880000,1797600,1500000,3297600,260.3,560.9,1.8

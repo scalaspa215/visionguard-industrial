@@ -1,0 +1,107 @@
+{
+  "naturaleza": "ESTIMACION_ACADEMICA_NO_RESULTADO_INDUSTRIAL",
+  "supuestos": {
+    "usd_clp": 950,
+    "hora_inspector_clp": 8500,
+    "hora_ingeniero_clp": 25000,
+    "costo_escape_clp": 60000,
+    "costos_operacion_clp_anio": {
+      "n8n Cloud (plan Starter, ~24 EUR/mes)": 324000,
+      "OpenAI GPT-4o mini (3 ejecuciones/dia, ~3k tokens c/u)": 11400,
+      "Render: 2 APIs Python (plan Starter 7 USD/mes c/u)": 159600,
+      "Hugging Face (plan PRO 9 USD/mes, embeddings)": 102600,
+      "Mantencion (4 h/mes de ingeniero)": 1200000
+    },
+    "implementacion_clp": 1500000
+  },
+  "escenarios": {
+    "Conservador": {
+      "horas_ahorradas_mes": 20,
+      "escapes_evitados_mes": 2,
+      "beneficio_anual_clp": 3480000,
+      "costo_operacion_anual_clp": 1797600,
+      "implementacion_clp": 1500000,
+      "costo_total_anio1_clp": 3297600,
+      "roi_anio1_pct": 5.5,
+      "roi_anio2_pct": 93.6,
+      "recuperacion_meses": 10.7
+    },
+    "Base": {
+      "horas_ahorradas_mes": 15.9,
+      "escapes_evitados_mes": 4,
+      "beneficio_anual_clp": 4501224,
+      "costo_operacion_anual_clp": 1797600,
+      "implementacion_clp": 1500000,
+      "costo_total_anio1_clp": 3297600,
+      "roi_anio1_pct": 36.5,
+      "roi_anio2_pct": 150.4,
+      "recuperacion_meses": 6.7
+    },
+    "Optimista": {
+      "horas_ahorradas_mes": 60,
+      "escapes_evitados_mes": 8,
+      "beneficio_anual_clp": 11880000,
+      "costo_operacion_anual_clp": 1797600,
+      "implementacion_clp": 1500000,
+      "costo_total_anio1_clp": 3297600,
+      "roi_anio1_pct": 260.3,
+      "roi_anio2_pct": 560.9,
+      "recuperacion_meses": 1.8
+    }
+  },
+  "sensibilidad_horas": [
+    {
+      "horas_mes": 0,
+      "roi_anio1_pct": -12.7
+    },
+    {
+      "horas_mes": 5,
+      "roi_anio1_pct": 2.8
+    },
+    {
+      "horas_mes": 10,
+      "roi_anio1_pct": 18.3
+    },
+    {
+      "horas_mes": 15,
+      "roi_anio1_pct": 33.7
+    },
+    {
+      "horas_mes": 20,
+      "roi_anio1_pct": 49.2
+    },
+    {
+      "horas_mes": 25,
+      "roi_anio1_pct": 64.7
+    },
+    {
+      "horas_mes": 30,
+      "roi_anio1_pct": 80.1
+    },
+    {
+      "horas_mes": 35,
+      "roi_anio1_pct": 95.6
+    },
+    {
+      "horas_mes": 40,
+      "roi_anio1_pct": 111.1
+    },
+    {
+      "horas_mes": 45,
+      "roi_anio1_pct": 126.5
+    },
+    {
+      "horas_mes": 50,
+      "roi_anio1_pct": 142.0
+    },
+    {
+      "horas_mes": 55,
+      "roi_anio1_pct": 157.5
+    },
+    {
+      "horas_mes": 60,
+      "roi_anio1_pct": 172.9
+    }
+  ],
+  "equilibrio_horas_mes_con_4_escapes": 4.1
+}

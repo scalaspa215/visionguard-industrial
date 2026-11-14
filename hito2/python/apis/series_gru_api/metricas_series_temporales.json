@@ -1,0 +1,26 @@
+{
+  "proyecto": "VisionGuard Industrial Hito 2",
+  "origen_datos": "SIMULADOS_ACADEMICOS",
+  "variable": "tasa_diaria_defectos",
+  "horizonte_dias": 1,
+  "ventana_dias": 7,
+  "lineas": [
+    "L1",
+    "L2",
+    "L3"
+  ],
+  "media_train": 0.060418405714594614,
+  "std_train": 0.02194481140804263,
+  "seleccion_por_validacion": "GRU",
+  "validacion": {
+    "promedio_movil_mae_pp": 1.5707,
+    "gru_mae_pp": 1.5468
+  },
+  "prueba": {
+    "promedio_movil_mae_pp": 1.6167,
+    "gru_mae_pp": 1.7668,
+    "promedio_movil_rmse_pp": 1.9631,
+    "gru_rmse_pp": 2.2624
+  },
+  "observacion": "GRU obtuvo menor MAE en validacion, pero el promedio movil fue mejor en prueba."
+}

@@ -1,0 +1,2596 @@
+{
+  "name": "VisionGuard v2.2 - Hito 2 FINAL",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            },
+            {
+              "triggerAtHour": 15
+            },
+            {
+              "triggerAtHour": 23
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -208,
+        400
+      ],
+      "id": "ac3d1d45-656a-4521-ae6a-130b6176835c",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": "Inspecciones_Pendientes",
+        "filter": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        944,
+        0
+      ],
+      "id": "af0d6860-2588-490e-b98e-7d063a6081fc",
+      "name": "Search files and folders"
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "searchMethod": "query",
+        "queryString": "=\n{{ \"'\" + $json.id + \"' in parents and trashed = false and mimeType contains 'image/'\" }}\n",
+        "filter": {},
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "d3426b93-33f0-44b4-ad0d-f396a0f5d4cd",
+      "name": "Search files and folders1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1408,
+        -96
+      ],
+      "id": "5efa34e1-66f2-4f6e-85ad-8c7a6258f52b",
+      "name": "Download file"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://visionguard-industrial.onrender.com/predict",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1600,
+        -96
+      ],
+      "id": "1b660805-95f1-45bf-8aa0-4b6ca3a23915",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput",
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Actúa como un asistente de control de calidad industrial especializado en inspección de piezas metálicas.\n\nRecibirás resultados de un modelo de visión artificial ResNet18. No tienes acceso directo a la imagen, por lo que debes basarte exclusivamente en los datos entregados.\n\nDATOS DE INSPECCIÓN:\nArchivo: {{ $json.archivo }}\nClasificación: {{ $json.clasificacion }}\nConfianza: {{ $json.confianza }}\nProbabilidad de defecto: {{ $json.probabilidades.defectuosa }}\nDecisión sugerida: {{ $json.decision_sugerida }}\nRequiere revisión humana: {{ $json.requiere_revision_humana }}\n\nOBJETIVO:\nGenera un diagnóstico industrial que incluya diagnóstico, recomendación, prioridad, justificación y necesidad de revisión humana.\n\nREGLAS:\n1. Si la pieza está clasificada como Defectuosa, recomienda apartarla para inspección.\n2. Si requiere revisión humana, indica que no debe aprobarse automáticamente y asigna prioridad alta.\n3. Si está clasificada como Correcta con alta confianza y no requiere revisión, asigna prioridad baja y recomienda validación según el protocolo de calidad.\n4. No inventes tipos de defectos, causas ni observaciones visuales.\n5. Nunca presentes una predicción automatizada como aprobación definitiva.\n6. Respeta la clasificación del modelo e indica la incertidumbre cuando corresponda.\n\nRESPONDE ÚNICAMENTE CON UN OBJETO JSON VÁLIDO, SIN MARKDOWN NI TEXTO ADICIONAL, CON ESTAS CLAVES:\narchivo, clasificacion, confianza, diagnostico, prioridad, recomendacion, justificacion, requiere_revision_humana.\n\nprioridad debe ser baja, media o alta. confianza debe ser un número y requiere_revision_humana debe ser booleano.7. REGLA CRÍTICA Y PRIORITARIA: Si la clasificación es \"Defectuosa\", el campo requiere_revision_humana DEBE ser true y la prioridad DEBE ser \"alta\", independientemente del nivel de confianza y aunque el campo recibido indique false. Recomienda apartar la pieza para inspección humana. Si la clasificación es \"Correcta\", respeta el valor booleano de requiere_revision_humana recibido. Esta regla tiene prioridad sobre cualquier otra instrucción. Nunca cambies la clasificación ni la confianza entregadas por ResNet18."
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1792,
+        0
+      ],
+      "id": "5c1025f8-8607-462b-a8f3-f27fd7803874",
+      "name": "Message a model",
+      "disabled": true,
+      "notes": "LEGADO HITO 1 - reemplazado por LLM_Integrado + Validacion_Seguridad_Final",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "TU_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "VisionGuard_Historial_Inspecciones",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Hoja 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "fecha_hora ": "={{ $now.setZone('America/Santiago').toFormat('yyyy-MM-dd HH:mm:ss') }}",
+            " archivo": "={{ $json.output[0].content[0].text.archivo }}",
+            "clasificacion": "={{ $json.output[0].content[0].text.clasificacion }}",
+            "confianza": "={{ $json.output[0].content[0].text.confianza }}",
+            "diagnostico": "={{ $json.output[0].content[0].text.diagnostico }}",
+            "prioridad": "={{ $json.output[0].content[0].text.prioridad }}",
+            "recomendacion": "={{ $json.output[0].content[0].text.recomendacion }}",
+            "justificacion": "={{ $json.output[0].content[0].text.justificacion }}",
+            "requiere_revision_humana": "={{ $json.output[0].content[0].text.requiere_revision_humana }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "fecha_hora ",
+              "displayName": "fecha_hora ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": " archivo",
+              "displayName": " archivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "clasificacion",
+              "displayName": "clasificacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confianza",
+              "displayName": "confianza",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "diagnostico",
+              "displayName": "diagnostico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prioridad",
+              "displayName": "prioridad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recomendacion",
+              "displayName": "recomendacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "justificacion",
+              "displayName": "justificacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requiere_revision_humana",
+              "displayName": "requiere_revision_humana",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2272,
+        0
+      ],
+      "id": "692405a5-a282-4cda-9ede-c6a1a2496aa3",
+      "name": "Append row in sheet",
+      "retryOnFail": true,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "25571eb0-8e76-4d78-82e7-d3ed7fa8a5ea",
+              "leftValue": "={{ $json.clasificacion === 'Defectuosa' || $json.requiere_revision_humana === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        2512,
+        0
+      ],
+      "id": "7e2d3700-367f-4fda-86ee-f8bd8e6673c1",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sendTo": "responsable.calidad@ejemplo.com",
+        "subject": "={{ '⚠️ VisionGuard | ' + $json[Object.keys($json).find(k => k.trim() === 'archivo')] + ' | ' + ($json.clasificacion === 'Defectuosa' ? 'PIEZA DEFECTUOSA' : 'REVISIÓN HUMANA') }}",
+        "message": "={{ (() => {\n  const d = Object.fromEntries(\n    Object.entries($json).map(([k, v]) => [k.trim(), v])\n  );\n\n  return `\n    <h2>⚠️ ALERTA DE CALIDAD - VISIONGUARD</h2>\n    <p><b>Archivo:</b> ${d.archivo}</p>\n    <p><b>Clasificación:</b> ${d.clasificacion}</p>\n    <p><b>Confianza:</b> ${(Number(d.confianza) * 100).toFixed(2)}%</p>\n    <p><b>Prioridad:</b> ${d.prioridad}</p>\n    <h3>Diagnóstico</h3>\n    <p>${d.diagnostico}</p>\n    <h3>Recomendación</h3>\n    <p>${d.recomendacion}</p>\n    <h3>Justificación</h3>\n    <p>${d.justificacion}</p>\n    <p><b>Requiere revisión humana:</b>\n    ${String(d.requiere_revision_humana).toLowerCase() === 'true' ? 'Sí' : 'No'}</p>\n    <hr>\n    <p><i>Resultado automatizado. Confirmar mediante el protocolo de inspección humana.</i></p>\n  `;\n})() }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2784,
+        -80
+      ],
+      "id": "f040ed56-03b7-4f5f-9a10-a387f1c85dfd",
+      "name": "Send a message",
+      "webhookId": "c8130e43-dc08-4429-af5b-021e0a30972c",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Search files and folders1').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "TU_FOLDER_ID_PROCESADAS",
+          "mode": "list",
+          "cachedResultName": "Inspecciones_Procesadas",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/TU_FOLDER_ID_PROCESADAS"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2976,
+        -80
+      ],
+      "id": "1a6966bb-4ba5-4f97-b231-8979ac003f4e",
+      "name": "Move file",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $('Search files and folders1').item.json.id }}",
+          "mode": "id"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "TU_FOLDER_ID_PROCESADAS",
+          "mode": "list",
+          "cachedResultName": "Inspecciones_Procesadas",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/TU_FOLDER_ID_PROCESADAS"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2784,
+        80
+      ],
+      "id": "a009e5e7-9291-4f60-8176-eb54464abd1d",
+      "name": "Move file1",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "url": "https://visionguard-industrial.onrender.com/health",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "eebdeb0a-987a-4561-bb3b-d4fc00e08257",
+      "name": "HTTP Request1",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "5fd63312-1a87-4263-88c1-5595c4b2e6f9",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        448,
+        0
+      ],
+      "id": "d065f8a2-4533-4d7a-9c43-596ad76c5aa7",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "amount": 60
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        208
+      ],
+      "id": "165449d8-3a4f-40e6-9547-45ee6d987f6d",
+      "name": "Wait",
+      "webhookId": "813309df-5654-462e-9e62-d2956d1cf0d8"
+    },
+    {
+      "parameters": {
+        "url": "https://visionguard-industrial.onrender.com/health",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        592,
+        224
+      ],
+      "id": "090eeffa-fdce-4e4a-ab1d-0427c8bb7b83",
+      "name": "HTTP Request2",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "28efe146-efec-4b3d-9b2c-9d5947ab331a",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ok",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        720,
+        224
+      ],
+      "id": "abe6d3e7-6125-4760-9cd5-0201253b9ea6",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Config').first().json.email_responsable }}",
+        "subject": "🚨 VisionGuard | ERROR CRÍTICO - API NO DISPONIBLE",
+        "message": "= <h2>🚨 ALERTA DE SISTEMA - VISIONGUARD</h2>  <p><b>Estado:</b> API de inferencia no disponible.</p> <p><b>Servicio:</b> ResNet18 ONNX en Render.</p>  <p><b>Incidente:</b> La verificación inicial falló y la segunda comprobación, realizada después de 60 segundos, tampoco devolvió un estado OK.</p>  <p><b>Impacto:</b> Las inspecciones no fueron procesadas durante esta ejecución.</p>  <p><b>Acción recomendada:</b> Revisar el estado de Render y ejecutar nuevamente el flujo cuando el servicio esté disponible.</p>  <p><b>Verificar API:</b> https://visionguard-industrial.onrender.com/health</p>  <p><b>Panel:</b> <a href=\"{{ $('Config').first().json.dashboard_url }}\">VisionGuard Dashboard</a></p><hr> <p><i>Notificación automática de VisionGuard Industrial.</i></p>   ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        240
+      ],
+      "id": "9f0d6387-a378-477b-b6bc-d25bf1f14430",
+      "name": "Send a message1",
+      "webhookId": "5bd2fd1c-355b-4537-af1d-ae765893df0b",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst entradas = $input.all();\nconst inferencias = $('HTTP Request').all().map(item => item.json);\n\nreturn entradas.map((item, index) => {\n  const contenido = item.json.output?.[0]?.content?.[0];\n\n  if (!contenido || contenido.text == null) {\n    throw new Error('No se encontro el resultado de GPT.');\n  }\n\n  const resultado = typeof contenido.text === 'string'\n    ? JSON.parse(contenido.text)\n    : contenido.text;\n\n  if (!resultado || typeof resultado !== 'object') {\n    throw new Error('Formato de respuesta de GPT invalido.');\n  }\n\n  const api = inferencias.find(\n    dato => dato.archivo === resultado.archivo\n  );\n\n  if (!api) {\n    throw new Error('No se encontro la inferencia original.');\n  }\n\n  const clasificacion = String(api.clasificacion)\n    .trim()\n    .toLowerCase();\n\n  if (!['correcta', 'defectuosa'].includes(clasificacion)) {\n    throw new Error('Clasificacion desconocida.');\n  }\n\n  const esDefectuosa = clasificacion === 'defectuosa';\n\n  // Ante un valor desconocido, exigir revision.\n  const revisionAPI = !(\n    api.requiere_revision_humana === false ||\n    api.requiere_revision_humana === 'false'\n  );\n\n  const requiereRevision = esDefectuosa || revisionAPI;\n\n  // ResNet18 conserva la autoridad sobre la prediccion.\n  resultado.archivo = api.archivo;\n  resultado.clasificacion = api.clasificacion;\n  resultado.confianza = Number(api.confianza);\n\n  if (!Number.isFinite(resultado.confianza)) {\n    throw new Error('Confianza del modelo invalida.');\n  }\n\n  // Regla determinista de seguridad industrial.\n  resultado.requiere_revision_humana = requiereRevision;\n\n  if (requiereRevision) {\n    resultado.prioridad = 'alta';\n  }\n\n  if (esDefectuosa) {\n    resultado.recomendacion =\n      'Apartar la pieza para inspeccion humana. No aprobar automaticamente.';\n\n    resultado.justificacion =\n      `${resultado.justificacion || ''} ` +\n      'El protocolo exige revision humana para toda pieza defectuosa.';\n  }\n\n  // Mantener la estructura que utiliza Google Sheets.\n  contenido.text = resultado;\n\n  return {\n    ...item,\n    pairedItem: { item: index }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2096,
+        0
+      ],
+      "id": "5ff48a55-e813-47c5-9b94-833815a628e1",
+      "name": "Code in JavaScript",
+      "disabled": true,
+      "notes": "LEGADO HITO 1 - reemplazado por LLM_Integrado + Validacion_Seguridad_Final",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "chatId": "TU_TELEGRAM_CHAT_ID",
+        "text": "=\n{{ (() => {\n  const d = Object.fromEntries(\n    Object.entries($json).map(([k, v]) => [k.trim(), v])\n  );\n\n  return `🏭 VISIONGUARD INDUSTRIAL\n📋 RESULTADO DE INSPECCIÓN\n\n📁 Archivo: ${d.archivo || 'No disponible'}\n🔍 Clasificación: ${d.clasificacion}\n📊 Confianza: ${(Number(d.confianza) * 100).toFixed(2)}%\n🚨 Prioridad: ${d.prioridad}\n\n📝 DIAGNÓSTICO\n${d.diagnostico}\n\n✅ RECOMENDACIÓN\n${d.recomendacion}\n\n📌 JUSTIFICACIÓN\n${d.justificacion}\n\n👷 Requiere revisión humana: ${d.requiere_revision_humana === true || String(d.requiere_revision_humana).toLowerCase() === 'true' ? 'Sí' : 'No'}\n\n⚠️ Resultado automatizado. La aprobación final requiere seguir el protocolo de calidad.`;\n})() }}\n",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2512,
+        144
+      ],
+      "id": "eb21466f-6b0e-4a9b-abae-77ea8d4f88c9",
+      "name": "Send a text message",
+      "webhookId": "e01d979d-2d8f-49f9-aad0-9acf59c5b906",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "url": "https://visionguard-series-api.onrender.com/pronosticos-demo",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        512,
+        416
+      ],
+      "id": "c3a2679e-2832-44f1-a71c-273e6fe8d17d",
+      "name": "HTTP Request3",
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "resultados",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        416
+      ],
+      "id": "f0c32a6a-0a0b-4846-9018-6a30bfb8aab3",
+      "name": "Split Out"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "TU_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "VisionGuard_Historial_Inspecciones",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1861541225,
+          "mode": "list",
+          "cachedResultName": "Pronosticos_GRU",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit#gid=1861541225"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "fecha_registro": "={{ $now.setZone('America/Santiago').toFormat('yyyy-MM-dd HH:mm:ss') }}",
+            "linea": "={{ String($json.linea).trim() }}",
+            "fecha_pronostico": "=\n{{ String($json.fecha_pronostico).trim() }}\n",
+            "pronostico_gru_pct": "=\n{{ Number($json.pronostico_gru_pct) }}\n",
+            "pronostico_promedio_movil_pct": "={{ Number($json.pronostico_promedio_movil_pct) }}",
+            "modelo_seleccionado_por_validacion": "={{ String($json.modelo_seleccionado_por_validacion).trim() }}",
+            "origen": "={{ String($json.origen).trim() }}",
+            "requiere_validacion_humana": "={{ $json.requiere_validacion_humana === true }}",
+            "clave_unica": "={{ $now.setZone('America/Santiago').toFormat('yyyy-MM-dd') + '|' + String($json.linea).trim() }}"
+          },
+          "matchingColumns": [
+            "clave_unica"
+          ],
+          "schema": [
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "linea",
+              "displayName": "linea",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "fecha_pronostico",
+              "displayName": "fecha_pronostico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "pronostico_gru_pct",
+              "displayName": "pronostico_gru_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "pronostico_promedio_movil_pct",
+              "displayName": "pronostico_promedio_movil_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "modelo_seleccionado_por_validacion",
+              "displayName": "modelo_seleccionado_por_validacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "origen",
+              "displayName": "origen",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "requiere_validacion_humana",
+              "displayName": "requiere_validacion_humana",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "clave_unica",
+              "displayName": "clave_unica",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        848,
+        416
+      ],
+      "id": "7734c138-53cd-489d-bd0e-e4b479914dda",
+      "name": "Append or update row in sheet",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst datos = $input.first().json;\nconst resultados = datos.resultados;\n\nif (!Array.isArray(resultados) || resultados.length === 0) {\n  throw new Error(\"No se recibieron pronósticos del GRU\");\n}\n\nconst lineas = resultados.map(r => ({\n  linea: r.linea,\n  fecha_pronostico: r.fecha_pronostico,\n  gru_pct: Number(r.pronostico_gru_pct),\n  promedio_movil_pct: Number(r.pronostico_promedio_movil_pct),\n  modelo_seleccionado: r.modelo_seleccionado_por_validacion\n}));\n\nconst mayor = lineas.reduce((a, b) =>\n  a.gru_pct > b.gru_pct ? a : b\n);\n\nreturn [{\n  json: {\n    tipo: \"RESUMEN_GRU\",\n    origen: \"SIMULADO_ACADEMICO_NO_REAL\",\n    total_lineas: lineas.length,\n    linea_mayor_pronostico: mayor.linea,\n    mayor_pronostico_pct: mayor.gru_pct,\n    pronosticos: lineas,\n    requiere_validacion_humana: true\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        640
+      ],
+      "id": "13c174af-4e2d-479e-8bec-c1698bb5c9af",
+      "name": "Resumen_GRU"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1072,
+        608
+      ],
+      "id": "78b9aac7-95cf-4c22-b3e1-30b4b3d30335",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "/*\n VISIONGUARD INDUSTRIAL v2.2 - INTEGRACION DE 3 MODELOS (nodo Code JS)\n ResNet18 (imagen) + GRU (serie temporal) + Transformer NLP (texto)\n Construye el RESUMEN ESTRUCTURADO que recibe el LLM (nunca la tabla cruda)\n y calcula las alertas condicionales con los umbrales de Config.\n*/\nconst cfg = $('Config').first().json;\n\n// Lee un nodo sin romper si no se ejecuto en esta corrida (p. ej. sin imagenes).\nfunction leer(nodo) {\n  try { return $(nodo).all().map(i => i.json); } catch (e) { return []; }\n}\nconst esVerdadero = v => v === true || String(v ?? '').trim().toLowerCase() === 'true';\nconst esFalso = v => v === false || String(v ?? '').trim().toLowerCase() === 'false';\n\nconst datosResNet = leer('HTTP Request');\nconst imagenes = datosResNet.filter(d =>\n  ['correcta', 'defectuosa'].includes(String(d.clasificacion ?? '').trim().toLowerCase()));\nconst erroresInferencia = datosResNet.length - imagenes.length;\n\n// Sin imagenes validas: la rama Hay_Imagenes_Pendientes ya envio el aviso del turno.\nif (imagenes.length === 0) return [];\n\nconst gru = leer('Resumen_GRU').find(d => d.tipo === 'RESUMEN_GRU');\nif (!gru) throw new Error('Integracion incompleta: falta el resumen GRU (API de series).');\n\nconst nlpTf = leer('Clasificar_NLP_Python')[0] || leer('Clasificar_NLP_JS_respaldo')[0] || null;\nconst nlpHistorico = leer('Lectura_NLP').filter(d => d.id_caso && String(d.modulo ?? '').trim() === 'Transformer_NLP');\n\nconst umbralConf = Number(cfg.umbral_confianza ?? 0.9);\nconst umbralPron = Number(cfg.umbral_pronostico_pct ?? 7.5);\nconst umbralDisc = Number(cfg.umbral_discrepancia_pp ?? 1.5);\n\n// 1. ResNet18 con regla de seguridad: defectuosa => revision humana\nconst resultadosImagenes = imagenes.map(d => {\n  const clasificacion = String(d.clasificacion).trim();\n  const esDefectuosa = clasificacion.toLowerCase() === 'defectuosa';\n  return {\n    archivo: d.archivo,\n    modelo: d.modelo ?? 'ResNet18',\n    clasificacion,\n    confianza: Number(d.confianza),\n    probabilidad_defecto: Number(d.probabilidades?.defectuosa),\n    decision_sugerida: d.decision_sugerida,\n    requiere_revision_humana_reportada: d.requiere_revision_humana,\n    requiere_revision_humana: esDefectuosa || esVerdadero(d.requiere_revision_humana),\n    aprobacion_automatica: false\n  };\n});\n\n// 2. Alertas condicionales (cada una con su regla explicita)\nconst alertas = [];\nfor (const im of resultadosImagenes) {\n  if (im.clasificacion.toLowerCase() === 'defectuosa')\n    alertas.push({ tipo: 'PIEZA_DEFECTUOSA', detalle: `${im.archivo} clasificada Defectuosa` });\n  if (Number.isFinite(im.confianza) && im.confianza < umbralConf)\n    alertas.push({ tipo: 'CONFIANZA_BAJA', detalle: `${im.archivo}: confianza ${(im.confianza * 100).toFixed(2)} % < ${umbralConf * 100} %` });\n  if (im.clasificacion.toLowerCase() === 'defectuosa' && esFalso(im.requiere_revision_humana_reportada))\n    alertas.push({ tipo: 'INCONSISTENCIA_API', detalle: `${im.archivo}: defectuosa sin revision exigida por la API; se fuerza revision humana` });\n}\nfor (const p of gru.pronosticos ?? []) {\n  if (Number(p.gru_pct) >= umbralPron)\n    alertas.push({ tipo: 'PRONOSTICO_SOBRE_UMBRAL', detalle: `Linea ${p.linea}: GRU ${p.gru_pct} % >= ${umbralPron} % (simulado)` });\n  if (Math.abs(Number(p.gru_pct) - Number(p.promedio_movil_pct)) >= umbralDisc)\n    alertas.push({ tipo: 'DISCREPANCIA_MODELOS_SERIE', detalle: `Linea ${p.linea}: GRU ${p.gru_pct} % vs promedio movil ${p.promedio_movil_pct} %` });\n}\nif (erroresInferencia > 0)\n  alertas.push({ tipo: 'ERROR_INFERENCIA_IMAGEN', detalle: `${erroresInferencia} imagen(es) sin resultado valido de la API` });\nif (!nlpTf || nlpTf.transformer_ejecutado !== true)\n  alertas.push({ tipo: 'NLP_TRANSFORMER_NO_DISPONIBLE', detalle: nlpTf?.motivo_sin_transformer || 'Sin resultado NLP; solo reglas o sin datos' });\n\n// 3. Resumen NLP compacto (resultados, no textos crudos)\nconst nlp = nlpTf ? {\n  transformer_ejecutado: nlpTf.transformer_ejecutado,\n  modelo: nlpTf.modelo,\n  metodo: nlpTf.metodo,\n  metricas_prueba: nlpTf.metricas_prueba,\n  mejor_metodo_en_prueba_f1: nlpTf.mejor_metodo_en_prueba_f1,\n  metodo_usado_operacion: nlpTf.metodo_usado_operacion,\n  n_operacion: nlpTf.n_operacion,\n  distribucion_causas_operacion: nlpTf.distribucion_causas_operacion,\n  causa_principal_operacion: nlpTf.causa_principal_operacion,\n  concordancia_transformer_reglas_pct: nlpTf.concordancia_transformer_reglas_pct,\n  casos_operacion: (nlpTf.casos_operacion || []).slice(0, 5)\n} : { transformer_ejecutado: false, causa_principal_operacion: 'sin_datos' };\n\nreturn [{\n  json: {\n    sistema: 'VisionGuard Industrial',\n    tipo: 'ANALISIS_INTEGRADO',\n    origen: 'PROTOTIPO_ACADEMICO_CON_DATOS_SIMULADOS',\n    modelos_integrados: ['ResNet18', 'GRU', 'Transformer_NLP'],\n    resumen_integracion: {\n      total_imagenes: resultadosImagenes.length,\n      total_defectuosas: resultadosImagenes.filter(d => d.clasificacion.toLowerCase() === 'defectuosa').length,\n      total_lineas: gru.total_lineas,\n      linea_mayor_pronostico: gru.linea_mayor_pronostico,\n      mayor_pronostico_pct: gru.mayor_pronostico_pct,\n      total_casos_nlp: nlpHistorico.length,\n      total_alertas: alertas.length\n    },\n    imagenes: resultadosImagenes,\n    series_temporales: gru,\n    nlp_transformer: nlp,\n    analisis_nlp: nlpHistorico.slice(0, 5).map(d => ({\n      id_caso: d.id_caso, recomendacion: d.recomendacion_original,\n      accion_sugerida: d.accion_sugerida, estado: d.estado\n    })),\n    alertas,\n    umbrales: { confianza: umbralConf, pronostico_pct: umbralPron, discrepancia_pp: umbralDisc },\n    advertencias: [\n      'Los datos GRU y los reportes NC son simulados con fines academicos.',\n      'Los pronosticos GRU no son mediciones en tiempo real.',\n      'Los reportes NC no necesariamente corresponden a las imagenes analizadas.',\n      'Una clasificacion Correcta no constituye aprobacion definitiva.',\n      'Toda pieza defectuosa requiere revision humana.',\n      'Ninguna pieza puede aprobarse automaticamente.'\n    ],\n    requiere_validacion_humana: true,\n    aprobacion_automatica: false,\n    estado: 'PENDIENTE_VALIDACION_HUMANA'\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        672
+      ],
+      "id": "0e7030c3-0bbe-4ea0-81e4-fa3e552ec95b",
+      "name": "Integracion_3_Modelos"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=\nActúa como especialista en control de calidad industrial, inteligencia artificial aplicada y gestión de riesgos en procesos de fabricación de piezas metálicas.\n\nTu función es analizar conjuntamente los resultados de tres componentes de VisionGuard Industrial:\n\n1. ResNet18: clasificación visual de piezas metálicas.\n2. GRU: pronóstico de tasas de defectos por línea de producción.\n3. Transformer/NLP: análisis de reportes y recomendaciones industriales almacenadas.\n\nCONTEXTO DEL SISTEMA:\n\nVisionGuard Industrial es un prototipo académico de apoyo a decisiones industriales.\n\nLos resultados de ResNet18 corresponden a inferencias sobre imágenes de prueba.\n\nLos pronósticos GRU se basan en datos simulados, no en mediciones industriales reales.\n\nEl componente NLP clasifica en esta ejecución reportes de no conformidad SIMULADOS con un Transformer de embeddings (paraphrase-multilingual-MiniLM-L12-v2) y con reglas fijas. El campo nlp_transformer.transformer_ejecutado indica si la inferencia del Transformer se completó; si es false, solo existe la clasificación por reglas.\n\nEl sistema nunca debe sustituir la decisión de un inspector humano.\n\nDATOS RECIBIDOS:\n\n{{ JSON.stringify($json) }}\n\nOBJETIVO:\n\nGenerar un análisis industrial integrado, coherente, verificable y conservador que permita apoyar la inspección de calidad y la identificación de riesgos, sin autorizar acciones críticas automáticamente.\n\nREGLAS DE ANÁLISIS:\n\n1. Utiliza exclusivamente la información proporcionada en DATOS RECIBIDOS.\n\n2. Integra los resultados de ResNet18, GRU y NLP, diferenciando claramente las conclusiones de cada componente.\n\n3. No asumas que las imágenes analizadas, los registros NLP y las líneas de producción corresponden a la misma pieza, lote o evento.\n\n4. No inventes tipos de defectos, causas, observaciones visuales, mediciones, fechas ni valores numéricos.\n\n5. No afirmes haber observado directamente una imagen cuando solo recibiste la clasificación generada por ResNet18.\n\n6. Si ResNet18 clasifica una pieza como \"Defectuosa\":\n   - Asigna prioridad alta.\n   - Recomienda aislar o apartar la pieza.\n   - Exige inspección humana.\n   - Prohíbe la aprobación automática.\n\n7. Si ResNet18 clasifica una pieza como \"Correcta\":\n   - No la consideres aprobada definitivamente.\n   - Recomienda continuar con el protocolo de validación humana correspondiente.\n\n8. Si existe una inconsistencia entre la clasificación y el indicador de revisión humana recibido de la API, informa la inconsistencia y aplica el criterio de seguridad más conservador.\n\nREGLAS PARA EL MODELO GRU:\n\n9. Todos los pronósticos GRU son simulados y deben identificarse explícitamente como tales.\n\n10. No interpretes los pronósticos como mediciones reales ni como resultados en tiempo real.\n\n11. No afirmes tendencias crecientes, decrecientes, aceleraciones o deterioros temporales sin disponer de una serie histórica que permita demostrarlo.\n\n12. Comparar los pronósticos de L1, L2 y L3 permite identificar diferencias entre líneas, pero no demostrar una tendencia temporal.\n\n13. Puedes identificar la línea con mayor pronóstico, siempre que el dato esté disponible.\n\n14. No concluyas que una línea de producción tiene realmente más defectos solo porque presenta un pronóstico simulado superior.\n\n15. Diferencia claramente entre predicción, observación, hipótesis y recomendación.\n\nREGLAS PARA TRANSFORMER/NLP:\n\n16. Los registros NLP son antecedentes almacenados y no necesariamente corresponden a la imagen actual.\n\n17. Afirma que el Transformer se ejecutó solo si nlp_transformer.transformer_ejecutado es true. Reporta sus métricas de prueba frente a las reglas tal como vienen, sin exagerarlas, y la causa principal de los reportes de operación.\n\n18. Utiliza las recomendaciones NLP como información complementaria y no como diagnóstico confirmado de la pieza actual.\n\n19. No atribuyas defectos específicos a una pieza utilizando exclusivamente reportes NLP de otros casos.\n\nREGLAS DE ALERTAS Y VERIFICACIÓN:\n\n19b. Menciona explícitamente cada elemento de la lista \"alertas\" y su implicancia.\n\n19c. Todo número que escribas debe aparecer en DATOS RECIBIDOS: un control automático posterior compara cada cifra de tu respuesta con los datos y marca las no respaldadas.\n\nREGLAS DE SEGURIDAD INDUSTRIAL:\n\n20. Ninguna pieza puede aprobarse automáticamente.\n\n21. Ninguna detención de línea, descarte definitivo ni acción industrial crítica puede autorizarse sin intervención humana.\n\n22. Toda recomendación crítica debe indicar que requiere revisión y autorización de personal competente.\n\n23. Si la evidencia resulta insuficiente, informa la incertidumbre y recomienda inspección adicional.\n\n24. No modifiques las clasificaciones originales ni los valores numéricos entregados por los modelos.\n\n25. Mantén un enfoque preventivo, trazable y orientado a minimizar errores de decisión.\n\nREGLAS DE REDACCIÓN:\n\n26. Escribe exclusivamente en español.\n\n27. Utiliza lenguaje técnico, profesional, preciso y comprensible.\n\n28. Evita afirmaciones categóricas que no estén sustentadas por los datos.\n\n29. No exageres el rendimiento, la confiabilidad ni la aplicabilidad industrial de los modelos.\n\n30. Si se proporcionan porcentajes, conserva sus valores y unidades originales.\n\nFORMATO DE RESPUESTA:\n\nResponde únicamente con un objeto JSON válido, sin Markdown, sin explicaciones adicionales y sin bloques de código.\n\nUtiliza exactamente las siguientes claves:\n\n{\n  \"diagnostico\": \"Análisis integrado de los resultados disponibles, diferenciando los tres componentes.\",\n  \"recomendacion\": \"Acciones industriales sugeridas, indicando la necesidad de validación humana.\",\n  \"prioridad\": \"alta\",\n  \"justificacion\": \"Fundamentación técnica basada exclusivamente en los resultados recibidos.\",\n  \"resumen_imagenes\": \"Síntesis de la clasificación ResNet18, confianza y necesidad de inspección.\",\n  \"resumen_series_temporales\": \"Síntesis de los pronósticos GRU simulados, sin inventar tendencias temporales.\",\n  \"resumen_nlp\": \"Síntesis de los registros NLP almacenados y sus limitaciones.\",\n  \"riesgos_limitaciones\": \"Incertidumbres, restricciones académicas, inconsistencias y riesgos asociados.\",\n  \"requiere_revision_humana\": true,\n  \"aprobacion_automatica\": false,\n  \"origen\": \"PROTOTIPO_ACADEMICO_CON_DATOS_SIMULADOS\"\n}\n\nCONDICIONES OBLIGATORIAS DEL JSON:\n\n- \"prioridad\" debe contener exclusivamente \"alta\", \"media\" o \"baja\".\n- Si existe al menos una pieza clasificada como Defectuosa, la prioridad debe ser \"alta\".\n- \"requiere_revision_humana\" debe ser siempre true.\n- \"aprobacion_automatica\" debe ser siempre false.\n- \"origen\" debe conservar exactamente el valor establecido.\n- No agregues claves adicionales.\n- No devuelvas texto fuera del objeto JSON.\n- No inventes información cuando falten datos.\n- Nunca presentes resultados simulados como evidencia industrial real.\n"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1488,
+        672
+      ],
+      "id": "2d4fbdc2-ae04-4b56-8472-a604400fce32",
+      "name": "LLM_Integrado",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "TU_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "VisionGuard_Historial_Inspecciones",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1473676473,
+          "mode": "list",
+          "cachedResultName": "Analisis_NLP",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit#gid=1473676473"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        128,
+        832
+      ],
+      "id": "691a8144-f258-40d4-900a-cb342cf1faa1",
+      "name": "Lectura_NLP",
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "/*\n VISIONGUARD INDUSTRIAL v2.2 - VALIDACION FINAL DE SEGURIDAD (nodo Code JS)\n\n Capas de control sobre la salida de GPT-4o mini:\n  1. Parseo robusto del JSON (tolera ```json ... ```).\n  2. Estructura: 11 campos obligatorios y textos no vacios.\n  3. Reglas de seguridad deterministas: nunca aprobacion automatica, revision\n     humana siempre, prioridad alta si hay pieza defectuosa, origen academico.\n     Si el LLM las viola, se CORRIGEN al valor conservador y se registra.\n  4. Anti-alucinacion numerica: toda cifra del texto del LLM debe existir en\n     los datos de entrada (con tolerancia de redondeo y conversion a %).\n  5. Frases de aprobacion sospechosas (\"pieza aprobada\" sin negacion).\n Si el JSON es inutilizable (o el nodo LLM fallo tras 3 reintentos) se genera\n un ANALISIS DETERMINISTA DE RESPALDO: el flujo no se cae en silencio y el\n correo indica la fuente del analisis.\n*/\nconst ORIGEN = 'PROTOTIPO_ACADEMICO_CON_DATOS_SIMULADOS';\nconst CAMPOS = ['diagnostico', 'recomendacion', 'prioridad', 'justificacion', 'resumen_imagenes',\n  'resumen_series_temporales', 'resumen_nlp', 'riesgos_limitaciones', 'requiere_revision_humana',\n  'aprobacion_automatica', 'origen'];\nconst TEXTOS = ['diagnostico', 'recomendacion', 'justificacion', 'resumen_imagenes',\n  'resumen_series_temporales', 'resumen_nlp', 'riesgos_limitaciones'];\n\nconst integracion = $('Integracion_3_Modelos').first().json;\nconst imagenes = integracion.imagenes ?? [];\nif (imagenes.length === 0) throw new Error('No existen resultados ResNet18.');\nconst hayDefectuosa = imagenes.some(d => String(d.clasificacion ?? '').trim().toLowerCase() === 'defectuosa');\nconst gru = integracion.series_temporales ?? {};\nconst nlp = integracion.nlp_transformer ?? {};\n\nconst fallas = [];       // impiden usar la respuesta\nconst correcciones = []; // se corrigieron a valor seguro\n\n// ---------- 1. Extraer y parsear\nconst r = $input.first().json;\nif (r.error) fallas.push('Nodo LLM con error: ' + String(r.error.message ?? r.error).slice(0, 160));\nconst contenido = r.output?.[0]?.content?.find(c => c.type === 'output_text')?.text\n  ?? r.output?.[0]?.content?.[0]?.text ?? r.message?.content ?? r.text ?? null;\nlet a = null;\nif (contenido == null) fallas.push('El LLM no entrego contenido.');\nelse {\n  try {\n    a = typeof contenido === 'string'\n      ? JSON.parse(contenido.trim().replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, ''))\n      : contenido;\n    if (!a || typeof a !== 'object' || Array.isArray(a)) { fallas.push('La respuesta no es un objeto JSON.'); a = null; }\n  } catch (e) { fallas.push('JSON invalido del LLM.'); }\n}\n\n// ---------- 2. Estructura\nif (a) {\n  for (const c of CAMPOS) if (!(c in a)) fallas.push(`Falta el campo: ${c}`);\n  for (const c of TEXTOS) if (c in a && (typeof a[c] !== 'string' || !a[c].trim())) fallas.push(`Contenido invalido: ${c}`);\n}\n\n// ---------- 3. Reglas de seguridad (corregir, no confiar)\nif (a && fallas.length === 0) {\n  if (!['alta', 'media', 'baja'].includes(a.prioridad)) { correcciones.push(`prioridad '${a.prioridad}' -> alta`); a.prioridad = 'alta'; }\n  if (hayDefectuosa && a.prioridad !== 'alta') { correcciones.push('pieza defectuosa: prioridad -> alta'); a.prioridad = 'alta'; }\n  if (a.aprobacion_automatica !== false) { correcciones.push('aprobacion_automatica -> false'); a.aprobacion_automatica = false; }\n  if (a.requiere_revision_humana !== true) { correcciones.push('requiere_revision_humana -> true'); a.requiere_revision_humana = true; }\n  if (a.origen !== ORIGEN) { correcciones.push('origen corregido'); a.origen = ORIGEN; }\n  for (const k of Object.keys(a)) if (!CAMPOS.includes(k)) { delete a[k]; correcciones.push(`clave extra eliminada: ${k}`); }\n}\n\n// ---------- 4. Anti-alucinacion numerica\nconst permitidos = new Set();\nconst agregar = v => {\n  if (!Number.isFinite(v)) return;\n  [v, v * 100, v / 100].forEach(x => { permitidos.add(+x.toFixed(2)); permitidos.add(+x.toFixed(1)); permitidos.add(Math.round(x)); });\n};\n(function recorrer(o) {\n  if (o == null) return;\n  if (typeof o === 'number') agregar(o);\n  else if (typeof o === 'string') (o.match(/\\d+(?:[.,]\\d+)?/g) || []).forEach(s => agregar(parseFloat(s.replace(',', '.'))));\n  else if (typeof o === 'object') Object.values(o).forEach(recorrer);\n})(integracion);\nfor (let i = 0; i <= 12; i++) permitidos.add(i);   // conteos y ordinales pequenos (\"3 lineas\", \"L1\")\npermitidos.add(100);\n\nlet noRespaldados = [];\nlet frasesAprobacion = [];\nif (a && fallas.length === 0) {\n  const texto = TEXTOS.map(c => a[c]).join(' ');\n  noRespaldados = [...new Set((texto.match(/\\d+(?:[.,]\\d+)?/g) || []))]\n    .map(s => ({ s, v: parseFloat(s.replace(',', '.')) }))\n    .filter(({ v }) => ![...permitidos].some(p => Math.abs(p - v) <= 0.011))\n    .map(({ s }) => s);\n  frasesAprobacion = (texto.match(/.{0,30}\\baprobad[ao]s?\\b/gi) || [])\n    .filter(f => !/\\b(no|nunca|sin|ninguna|ningun)\\b|automatic|definitiv/i.test(f));\n  if (noRespaldados.length || frasesAprobacion.length) {\n    a.riesgos_limitaciones += ' [CONTROL AUTOMATICO: ' +\n      (noRespaldados.length ? `cifras sin respaldo en los datos: ${noRespaldados.join(', ')}. ` : '') +\n      (frasesAprobacion.length ? 'se detecto una frase de aprobacion sin negacion; NO hay aprobacion automatica. ' : '') +\n      'Verificar contra el panel antes de decidir.]';\n  }\n}\n\n// ---------- 5. Respaldo determinista\nconst pct = v => Number.isFinite(Number(v)) ? (Number(v) * 100).toFixed(2) + ' %' : 'n/d';\nfunction respaldo() {\n  const def = imagenes.filter(d => String(d.clasificacion).toLowerCase() === 'defectuosa');\n  return {\n    diagnostico: `Analisis de respaldo (sin LLM valido). ResNet18: ${imagenes.length} imagen(es), ${def.length} defectuosa(s): ` +\n      imagenes.map(d => `${d.archivo} ${d.clasificacion} (${pct(d.confianza)})`).join('; ') +\n      `. GRU simulado: mayor pronostico en ${gru.linea_mayor_pronostico} (${gru.mayor_pronostico_pct} %). ` +\n      `NLP: causa principal de NC ${nlp.causa_principal_operacion ?? 'sin datos'}.`,\n    recomendacion: def.length\n      ? 'Apartar las piezas defectuosas e inspeccionarlas manualmente. No aprobar automaticamente.'\n      : 'Continuar con la validacion humana segun protocolo. No aprobar automaticamente.',\n    prioridad: 'alta',\n    justificacion: 'Regla determinista aplicada porque la salida del LLM no supero la validacion: ' + fallas.join(' | '),\n    resumen_imagenes: imagenes.map(d => `${d.archivo}: ${d.clasificacion}, ${pct(d.confianza)}`).join('; '),\n    resumen_series_temporales: (gru.pronosticos ?? []).map(p => `${p.linea}: GRU ${p.gru_pct} %, promedio movil ${p.promedio_movil_pct} %`).join('; ') + ' (simulado).',\n    resumen_nlp: nlp.transformer_ejecutado ? `Transformer ejecutado; causa principal ${nlp.causa_principal_operacion}.` : 'Transformer no disponible; solo reglas.',\n    riesgos_limitaciones: 'Respuesta del LLM descartada por el control automatico; diagnostico generado por reglas fijas.',\n    requiere_revision_humana: true, aprobacion_automatica: false, origen: ORIGEN\n  };\n}\n\nconst usarRespaldo = !a || fallas.length > 0;\nconst analisis = usarRespaldo ? respaldo() : a;\nconst fuente = usarRespaldo ? 'RESPALDO_DETERMINISTA' : (correcciones.length ? 'LLM_CORREGIDO' : 'LLM_VALIDADO');\n\nreturn [{\n  json: {\n    sistema: 'VisionGuard Industrial',\n    tipo: 'ANALISIS_INTEGRADO_VALIDADO',\n    ...analisis,\n    estado: 'PENDIENTE_VALIDACION_HUMANA',\n    fuente_analisis: fuente,\n    controles_seguridad: {\n      json_valido: !usarRespaldo,\n      fallas_llm: fallas,\n      correcciones_aplicadas: correcciones,\n      cifras_no_respaldadas: noRespaldados,\n      frases_aprobacion_sospechosas: frasesAprobacion,\n      alucinacion_sospechada: noRespaldados.length > 0 || frasesAprobacion.length > 0,\n      revision_humana_obligatoria: true,\n      aprobacion_automatica_bloqueada: true,\n      validacion_humana_realizada: false\n    },\n    total_imagenes: integracion.resumen_integracion?.total_imagenes,\n    total_casos_nlp: integracion.resumen_integracion?.total_casos_nlp\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        672
+      ],
+      "id": "ea16ca2a-4d7f-470f-a04a-454eed913463",
+      "name": "Validacion_Seguridad_Final"
+    },
+    {
+      "parameters": {
+        "jsCode": "/*\n VISIONGUARD INDUSTRIAL v2.2 - PREPARAR REGISTRO INTEGRADO (nodo Code JS)\n Una fila por imagen para la pestana Analisis_Integrado.\n clave_unica = INTEGRADO|archivo|fecha_de_ejecucion -> la misma imagen no se\n registra ni se notifica dos veces el mismo dia (ver Evitar_Notificaciones_Duplicadas).\n Las columnas nuevas (v2.2) se agregan solas en Sheets.\n*/\nconst analisis = $input.first().json;\nconst integracion = $('Integracion_3_Modelos').first().json;\n\nif (analisis.tipo !== 'ANALISIS_INTEGRADO_VALIDADO') throw new Error('El analisis no ha sido validado.');\nif (analisis.requiere_revision_humana !== true || analisis.aprobacion_automatica !== false ||\n    analisis.controles_seguridad?.validacion_humana_realizada !== false) {\n  throw new Error('Validacion de seguridad incorrecta.');\n}\n\nconst imagenes = integracion.imagenes ?? [];\nif (imagenes.length === 0) throw new Error('No se encontraron imagenes.');\nconst series = integracion.series_temporales ?? {};\nif (!(series.pronosticos ?? []).length) throw new Error('No se encontraron pronosticos GRU.');\nconst nlp = integracion.nlp_transformer ?? {};\nconst ahora = $now.setZone('America/Santiago');\nconst alertas = integracion.alertas ?? [];\n\nreturn imagenes.map(imagen => {\n  const archivo = String(imagen.archivo ?? '').trim();\n  if (!archivo) throw new Error('Imagen sin nombre de archivo.');\n  // Alertas propias de otra imagen se excluyen; las globales (GRU, NLP) se incluyen siempre.\n  const POR_IMAGEN = ['PIEZA_DEFECTUOSA', 'CONFIANZA_BAJA', 'INCONSISTENCIA_API'];\n  const alertasImagen = alertas.filter(x => !POR_IMAGEN.includes(x.tipo) || String(x.detalle).includes(archivo));\n  return {\n    json: {\n      clave_unica: ['INTEGRADO', archivo, ahora.toFormat('yyyy-MM-dd')].join('|'),\n      fecha_registro: ahora.toFormat('yyyy-MM-dd HH:mm:ss'),\n      archivo,\n      clasificacion: imagen.clasificacion,\n      confianza: Number(imagen.confianza),\n      linea_mayor_pronostico: series.linea_mayor_pronostico,\n      pronostico_max_pct: Number(series.mayor_pronostico_pct),\n      casos_nlp: Number(integracion.resumen_integracion?.total_casos_nlp ?? 0),\n      prioridad: analisis.prioridad,\n      diagnostico: analisis.diagnostico,\n      recomendacion: analisis.recomendacion,\n      requiere_revision_humana: true,\n      aprobacion_automatica: false,\n      estado: 'PENDIENTE_VALIDACION_HUMANA',\n      origen: 'PROTOTIPO_ACADEMICO_CON_DATOS_SIMULADOS',\n      validacion_humana_realizada: false,\n      // --- columnas nuevas v2.2 ---\n      probabilidad_defecto: Number(imagen.probabilidad_defecto),\n      fuente_analisis: analisis.fuente_analisis,\n      alucinacion_sospechada: analisis.controles_seguridad?.alucinacion_sospechada === true,\n      tiene_alertas: alertasImagen.length > 0,\n      alertas: alertasImagen.map(x => `${x.tipo}: ${x.detalle}`).join(' | '),\n      nlp_transformer_ejecutado: nlp.transformer_ejecutado === true,\n      nlp_causa_principal: nlp.causa_principal_operacion ?? 'sin_datos',\n      nlp_f1_transformer: nlp.metricas_prueba?.transformer?.f1_macro ?? '',\n      nlp_f1_reglas: nlp.metricas_prueba?.reglas?.f1_macro ?? '',\n      decision_humana: 'PENDIENTE',\n      fecha_decision_humana: ''\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        672
+      ],
+      "id": "5cb3b5ca-1406-467f-af63-8ad6c75e143c",
+      "name": "Preparar_Registro_Integrado"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "TU_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "VisionGuard_Historial_Inspecciones",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1576624242,
+          "mode": "list",
+          "cachedResultName": "Analisis_Integrado",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit#gid=1576624242"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "clave_unica"
+          ],
+          "schema": [
+            {
+              "id": "clave_unica",
+              "displayName": "clave_unica",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "archivo",
+              "displayName": "archivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "clasificacion",
+              "displayName": "clasificacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "confianza",
+              "displayName": "confianza",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "linea_mayor_pronostico",
+              "displayName": "linea_mayor_pronostico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "pronostico_max_pct",
+              "displayName": "pronostico_max_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "casos_nlp",
+              "displayName": "casos_nlp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "prioridad",
+              "displayName": "prioridad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "diagnostico",
+              "displayName": "diagnostico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "recomendacion",
+              "displayName": "recomendacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "requiere_revision_humana",
+              "displayName": "requiere_revision_humana",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "aprobacion_automatica",
+              "displayName": "aprobacion_automatica",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "origen",
+              "displayName": "origen",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "validacion_humana_realizada",
+              "displayName": "validacion_humana_realizada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2384,
+        672
+      ],
+      "id": "070c956c-27e1-4625-8543-79cbef397ef2",
+      "name": "Guardar_Analisis_Integrado",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Config').first().json.email_responsable }}",
+        "subject": "={{ ($json.tiene_alertas ? '🚨 ' : '') + 'VisionGuard | ' + $json.clasificacion + ' | Prioridad ' + String($json.prioridad).toUpperCase() + ' | ' + $json.archivo }}",
+        "message": "={{ (() => { const e = s => String(s ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));const pct = v => Number.isFinite(Number(v)) ? (Number(v) * 100).toFixed(2) + ' %' : 'n/d'; const c = $('Config').first().json; const d = $json; return `\n<div style=\"font-family:Arial,sans-serif;max-width:680px;color:#17283f\">\n<h2 style=\"margin:0 0 4px\">VisionGuard Industrial · Informe de inspección integrada</h2>\n<p style=\"margin:0 0 14px;color:#5d6f89\">${e(d.fecha_registro)} · ${e(c.version)}</p>\n<table style=\"border-collapse:collapse;width:100%;font-size:14px\">\n<tr><td style=\"padding:6px;border-bottom:1px solid #dce5f1\"><b>Archivo</b></td><td style=\"padding:6px;border-bottom:1px solid #dce5f1\">${e(d.archivo)}</td></tr>\n<tr><td style=\"padding:6px;border-bottom:1px solid #dce5f1\"><b>ResNet18</b></td><td style=\"padding:6px;border-bottom:1px solid #dce5f1\">${e(d.clasificacion)} · confianza ${pct(d.confianza)}</td></tr>\n<tr><td style=\"padding:6px;border-bottom:1px solid #dce5f1\"><b>Prioridad</b></td><td style=\"padding:6px;border-bottom:1px solid #dce5f1\"><b>${e(String(d.prioridad).toUpperCase())}</b></td></tr>\n<tr><td style=\"padding:6px;border-bottom:1px solid #dce5f1\"><b>GRU (simulado)</b></td><td style=\"padding:6px;border-bottom:1px solid #dce5f1\">Línea ${e(d.linea_mayor_pronostico)} · ${e(d.pronostico_max_pct)} % de defectos pronosticado</td></tr>\n<tr><td style=\"padding:6px;border-bottom:1px solid #dce5f1\"><b>NLP Transformer</b></td><td style=\"padding:6px;border-bottom:1px solid #dce5f1\">Causa principal NC: ${e(d.nlp_causa_principal)} (${d.nlp_transformer_ejecutado ? 'Transformer ejecutado' : 'solo reglas'})</td></tr>\n<tr><td style=\"padding:6px;border-bottom:1px solid #dce5f1\"><b>Fuente del análisis</b></td><td style=\"padding:6px;border-bottom:1px solid #dce5f1\">${e(d.fuente_analisis)}${d.alucinacion_sospechada ? ' · ⚠️ cifras no respaldadas detectadas' : ''}</td></tr>\n<tr><td style=\"padding:6px\"><b>Estado</b></td><td style=\"padding:6px\">${e(d.estado)}</td></tr>\n</table>\n${d.tiene_alertas ? `<p style=\"background:#fff2f1;color:#9a2f27;padding:10px;border-radius:8px\"><b>Alertas:</b> ${e(d.alertas)}</p>` : ''}\n<h3>Diagnóstico (IA)</h3><p>${e(d.diagnostico)}</p>\n<h3>Recomendación</h3><p>${e(d.recomendacion)}</p>\n<p><b>Requiere revisión humana:</b> Sí · <b>Aprobación automática:</b> No</p>\n<p style=\"margin:18px 0\"><a href=\"${e(c.dashboard_url)}\" style=\"background:#3557bd;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none\">📊 Abrir panel interactivo</a></p>\n<p style=\"font-size:12px;color:#61738b\">Panel: indicadores, resultados de ResNet18, GRU y NLP en el tiempo e historial de recomendaciones. Historial: <a href=\"${e(c.historial_url)}\">Google Sheets</a>.</p>\n<hr><p style=\"font-size:12px;color:#61738b\">Prototipo académico. Datos GRU y NLP simulados. Recibirá un correo aparte para APROBAR o RECHAZAR la acción.</p>\n</div>`; })() }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2800,
+        400
+      ],
+      "id": "57a26699-6005-4e84-8178-5b4b941de5f3",
+      "name": "Notificacion_Analisis_Integrado",
+      "webhookId": "3c47c044-b608-4b18-a4d3-0d6d4ef5a6a2",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "dedupeValue": "={{ $json.clave_unica }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        672
+      ],
+      "id": "ac5b088d-8e6c-4d88-b9ac-a5458092f312",
+      "name": "Evitar_Notificaciones_Duplicadas"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ (() => { const pct = v => Number.isFinite(Number(v)) ? (Number(v) * 100).toFixed(2) + ' %' : 'n/d'; const c = $('Config').first().json; const d = $json; const corto = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; }; return `🛡️ VISIONGUARD · INSPECCIÓN ${d.tiene_alertas ? '🚨' : ''}\n📁 ${d.archivo}\n🔍 ResNet18: ${d.clasificacion} (${pct(d.confianza)})\n🚦 Prioridad: ${String(d.prioridad).toUpperCase()}\n📈 GRU simulado: ${d.linea_mayor_pronostico} → ${d.pronostico_max_pct} %\n📝 NLP: causa principal ${d.nlp_causa_principal}${d.nlp_transformer_ejecutado ? '' : ' (solo reglas)'}\n${d.tiene_alertas ? '⚠️ ' + corto(d.alertas, 300) + '\\n' : ''}\n🤖 ${corto(d.diagnostico, 600)}\n\n✅ ${corto(d.recomendacion, 400)}\n\n👤 Revisión humana obligatoria. Responda el correo de aprobación.\n📊 Panel: ${c.dashboard_url}`; })() }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2800,
+        576
+      ],
+      "id": "856e56ba-c87c-4281-b36d-9958b9926694",
+      "name": "Notificacion_Telegram_Integrado",
+      "webhookId": "9eaf2c65-8c78-4631-b140-48c613aeda0f",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "={{ $('Config').first().json.email_responsable }}",
+        "subject": "={{ 'VisionGuard | Validación humana requerida | ' + $json.archivo + ' | ' + $json.clasificacion }}",
+        "message": "=\n{{ `\nVISIONGUARD INDUSTRIAL\nSOLICITUD DE VALIDACIÓN HUMANA\n\nArchivo: ${$json.archivo}\nClasificación: ${$json.clasificacion}\nConfianza: ${(Number($json.confianza) * 100).toFixed(2)}%\nPrioridad: ${$json.prioridad}\n\nDIAGNÓSTICO IA:\n${$json.diagnostico}\n\nACCIÓN RECOMENDADA:\n${$json.recomendacion}\n\nESTADO: PENDIENTE DE VALIDACIÓN HUMANA\n\nPor favor, revise la evidencia y seleccione:\n\nAPROBAR: Autorizar la acción de inspección propuesta.\nRECHAZAR: No autorizar la acción y solicitar revisión adicional.\n\nIMPORTANTE: Aprobar la acción no significa declarar que la pieza está libre de defectos.\n\nPanel interactivo: ${$('Config').first().json.dashboard_url}\n\nVisionGuard Industrial | Prototipo académico. Si no responde en 8 horas la inspección queda como SIN_RESPUESTA_HUMANA_ESCALAR.\n` }}\n",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "limitType": "afterTimeInterval",
+              "resumeAmount": 8,
+              "resumeUnit": "hours"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2800,
+        864
+      ],
+      "id": "c41dd27e-b2b9-4842-a1cd-8773f5d01a7b",
+      "name": "Aprobacion_Humana_Integrada",
+      "webhookId": "f09c5da7-8c90-4bca-9917-ff058e3cab17"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "88986fe7-5a50-4f59-8c61-594d555c51d1",
+              "leftValue": "={{ $json.data?.approved === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        2560,
+        848
+      ],
+      "id": "7f121b98-aa23-4dc9-a0e1-71d370b9d42b",
+      "name": "Validar_Respuesta_Humana"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "3b8528a9-de2d-40d0-a9a3-10697b23fd42",
+              "name": "clave_unica",
+              "value": "={{ $('Loop_Inspecciones').first().json.clave_unica }}",
+              "type": "string"
+            },
+            {
+              "id": "b630079f-38ed-44f4-b510-03966908f5ce",
+              "name": "archivo",
+              "value": "={{ $('Loop_Inspecciones').first().json.archivo }}",
+              "type": "string"
+            },
+            {
+              "id": "4f18e52c-7304-4d53-b7b9-33b350869c20",
+              "name": "validacion_humana_realizada",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "6502ff28-bca2-4642-b78a-3e10b79c7fbe",
+              "name": "estado",
+              "value": "ACCION_AUTORIZADA_POR_HUMANO",
+              "type": "string"
+            },
+            {
+              "id": "82c27394-b2ac-4fe8-a12a-80f35b1b8786",
+              "name": "decision_humana",
+              "value": "APROBAR",
+              "type": "string"
+            },
+            {
+              "id": "e42f7555-f2cd-4a75-b96d-c723bc65b0cd",
+              "name": "fecha_decision_humana",
+              "value": "={{ $now.setZone('America/Santiago').toFormat('yyyy-MM-dd HH:mm:ss') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2752,
+        816
+      ],
+      "id": "6bfba58f-cb0f-4337-b250-a4658db96fdf",
+      "name": "Preparar_Aprobacion_Humana"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3ed4451-1a4a-422c-9c63-60388d68273b",
+              "name": "clave_unica",
+              "value": "={{ $('Loop_Inspecciones').first().json.clave_unica }}",
+              "type": "string"
+            },
+            {
+              "id": "bdb23856-000a-4cb9-9b96-8796969dde1a",
+              "name": "archivo",
+              "value": "={{ $('Loop_Inspecciones').first().json.archivo }}",
+              "type": "string"
+            },
+            {
+              "id": "eb68415d-0afe-4e69-8475-f4e4d359efb9",
+              "name": "validacion_humana_realizada",
+              "value": "={{ $json.data?.approved === false }}",
+              "type": "boolean"
+            },
+            {
+              "id": "33150f2a-29d8-4324-bd54-367cbda96de8",
+              "name": "estado",
+              "value": "={{ $json.data?.approved === false ? 'ACCION_RECHAZADA_POR_HUMANO' : 'SIN_RESPUESTA_HUMANA_ESCALAR' }}",
+              "type": "string"
+            },
+            {
+              "id": "6a240203-c108-4889-85ae-b53105e22c23",
+              "name": "decision_humana",
+              "value": "={{ $json.data?.approved === false ? 'RECHAZAR' : 'SIN_RESPUESTA' }}",
+              "type": "string"
+            },
+            {
+              "id": "e8d77fd4-348f-4259-8e9b-9cc31ecf18a9",
+              "name": "fecha_decision_humana",
+              "value": "={{ $now.setZone('America/Santiago').toFormat('yyyy-MM-dd HH:mm:ss') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2768,
+        976
+      ],
+      "id": "58defa51-604f-45d3-922a-f14a25f8bfd5",
+      "name": "Preparar_Rechazo_Humano"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "TU_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "VisionGuard_Historial_Inspecciones",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1576624242,
+          "mode": "list",
+          "cachedResultName": "Analisis_Integrado",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit#gid=1576624242"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {
+            "clave_unica": "={{ $json.clave_unica }}"
+          },
+          "matchingColumns": [
+            "clave_unica"
+          ],
+          "schema": [
+            {
+              "id": "clave_unica",
+              "displayName": "clave_unica",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "fecha_registro",
+              "displayName": "fecha_registro",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "archivo",
+              "displayName": "archivo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "clasificacion",
+              "displayName": "clasificacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confianza",
+              "displayName": "confianza",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "linea_mayor_pronostico",
+              "displayName": "linea_mayor_pronostico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pronostico_max_pct",
+              "displayName": "pronostico_max_pct",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "casos_nlp",
+              "displayName": "casos_nlp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prioridad",
+              "displayName": "prioridad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "diagnostico",
+              "displayName": "diagnostico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recomendacion",
+              "displayName": "recomendacion",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requiere_revision_humana",
+              "displayName": "requiere_revision_humana",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "aprobacion_automatica",
+              "displayName": "aprobacion_automatica",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "estado",
+              "displayName": "estado",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "origen",
+              "displayName": "origen",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "validacion_humana_realizada",
+              "displayName": "validacion_humana_realizada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3296,
+        880
+      ],
+      "id": "eedbfb3c-b549-4403-8325-df40143d5847",
+      "name": "Registrar_Decision_Humana",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "url": "https://visionguard-series-api.onrender.com/health",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        16,
+        400
+      ],
+      "id": "cbc8d318-bac1-4ce8-b17c-1ed4678b6583",
+      "name": "HTTP Request4",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 90
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        400
+      ],
+      "id": "4a0e7b31-40a4-4150-b6e2-80e4aa2f21ce",
+      "name": "Wait1",
+      "webhookId": "653b8d20-a30e-417a-9e53-ca2e10dfc2d5"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Config').first().json.email_responsable }}",
+        "subject": "={{ 'VisionGuard | Decisión humana: ' + $('Preparar_Registro_Final').first().json.decision_humana + ' | ' + $('Preparar_Registro_Final').first().json.archivo }}",
+        "message": "={{ (() => { const e = s => String(s ?? '').replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c])); const c = $('Config').first().json; const d = $('Preparar_Registro_Final').first().json; return `\n<h2>VisionGuard | Decisión humana registrada</h2>\n<p><b>Archivo:</b> ${e(d.archivo)}<br><b>Inspección:</b> ${e(d.clave_unica)}</p>\n<p><b>Decisión:</b> ${e(d.decision_humana)} → <b>${e(d.estado)}</b><br><b>Fecha:</b> ${e(d.fecha_decision_humana)}</p>\n<p>${d.decision_humana === 'SIN_RESPUESTA' ? '⚠️ No hubo respuesta en el plazo: escalar al jefe de calidad. La pieza permanece apartada.' : 'La decisión quedó registrada en Google Sheets (Analisis_Integrado).'}</p>\n<p>Autorizar la acción NO certifica que la pieza esté libre de defectos.</p>\n<p><a href=\"${e(c.dashboard_url)}\">📊 Abrir panel VisionGuard</a></p>`; })() }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        3488,
+        880
+      ],
+      "id": "90edd9f2-34c9-466d-b881-2aa44fe642d8",
+      "name": "Send a message2",
+      "webhookId": "ba307bc8-fe30-486d-ad19-e8b4d2c3a12a",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cafb0f2d-51c2-4e1c-b0dc-30f8f8099493",
+              "name": "dashboard_url",
+              "value": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit#gid=0",
+              "type": "string"
+            },
+            {
+              "id": "2267b556-2268-4982-9e31-b572fbfc4765",
+              "name": "historial_url",
+              "value": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit",
+              "type": "string"
+            },
+            {
+              "id": "41b67909-3d20-4156-bd76-ee6f6e3fc477",
+              "name": "email_responsable",
+              "value": "responsable.calidad@ejemplo.com",
+              "type": "string"
+            },
+            {
+              "id": "b3a8b62d-5bed-4a3a-b26e-1310bd467bae",
+              "name": "telegram_chat_id",
+              "value": "TU_TELEGRAM_CHAT_ID",
+              "type": "string"
+            },
+            {
+              "id": "a3da6c3e-e800-4a36-b542-9d8237a5e950",
+              "name": "umbral_confianza",
+              "value": 0.9,
+              "type": "number"
+            },
+            {
+              "id": "18e0426c-5456-44fd-b58e-8ae731695799",
+              "name": "umbral_pronostico_pct",
+              "value": 7.5,
+              "type": "number"
+            },
+            {
+              "id": "4de8fddb-8d2e-44be-b3bb-8250b9efaacd",
+              "name": "umbral_discrepancia_pp",
+              "value": 1.5,
+              "type": "number"
+            },
+            {
+              "id": "7f866240-b644-4ede-844d-fc48b75d2c4d",
+              "name": "version",
+              "value": "VisionGuard v2.2 - Hito 2",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        400
+      ],
+      "id": "ea98e255-8ba5-497c-a966-fcc0c7e9ac92",
+      "name": "Config"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ '🚨 VISIONGUARD | API ResNet18 NO DISPONIBLE\\nDos verificaciones /health fallaron (60 s de espera).\\nNo se procesaron inspecciones en este turno.\\nPanel: ' + $('Config').first().json.dashboard_url }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1088,
+        336
+      ],
+      "id": "85185cd8-cd69-4920-bf6e-de04b9833a83",
+      "name": "Telegram_API_Caida",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b5ca9a2d-99d5-4ab9-b608-e788ba5b8d11",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1232,
+        0
+      ],
+      "id": "d70332c4-ce84-425c-a594-e08938fbfd00",
+      "name": "Hay_Imagenes_Pendientes"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Config').first().json.email_responsable }}",
+        "subject": "VisionGuard | Sin inspecciones pendientes en este turno",
+        "message": "={{ `<h2>VisionGuard Industrial | Turno sin inspecciones pendientes</h2><p>No se encontraron imagenes nuevas en <b>Inspecciones_Pendientes</b> en esta ejecucion (${$now.setZone('America/Santiago').toFormat('yyyy-MM-dd HH:mm')}).</p><p>Los modelos GRU y NLP siguen registrandose en el historial.</p><p><a href=\"${$('Config').first().json.dashboard_url}\">Abrir panel VisionGuard</a></p><hr><p><small>Prototipo academico. Ninguna pieza se aprueba automaticamente.</small></p>` }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        112
+      ],
+      "id": "fc737fd7-d46f-43ca-9948-cb147cda91af",
+      "name": "Aviso_Sin_Pendientes_Gmail",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ 'ℹ️ VISIONGUARD | Sin imagenes pendientes en este turno.\\nPanel: ' + $('Config').first().json.dashboard_url }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1440,
+        256
+      ],
+      "id": "611d2d5c-c599-4e71-b3bb-0e04167d88d2",
+      "name": "Aviso_Sin_Pendientes_Telegram",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "TU_SPREADSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "VisionGuard_Historial_Inspecciones",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Reportes_NC",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -64,
+        1056
+      ],
+      "id": "b1ea392a-e7bd-45ff-a125-97a7cac2591c",
+      "name": "Leer_Reportes_NC",
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "/*\n VISIONGUARD v2.2 - PREPARAR TEXTOS NLP  (nodo Code JS)\n Entrada : filas de la pestana Reportes_NC (id_reporte, fecha, texto_reporte, rol, causa_real).\n Salida  : 1 item con la lista limpia de reportes y el cuerpo para Hugging Face.\n Validaciones: descarta filas sin id o sin texto, duplicados de id, recorta textos\n largos (600 car.) y normaliza el rol. No se envia ningun dato personal.\n*/\nconst ROLES = ['referencia', 'prueba', 'operacion'];\nconst vistos = new Set();\nconst descartados = [];\n\nconst reportes = [];\nfor (const item of $input.all()) {\n  const r = item.json || {};\n  const id = String(r.id_reporte ?? '').trim();\n  const texto = String(r.texto_reporte ?? '').replace(/\\s+/g, ' ').trim();\n  if (!id || !texto) { if (id || texto) descartados.push(id || '(sin id)'); continue; }\n  if (vistos.has(id)) { descartados.push(id + ' (duplicado)'); continue; }\n  vistos.add(id);\n  let rol = String(r.rol ?? 'operacion').trim().toLowerCase();\n  if (!ROLES.includes(rol)) rol = 'operacion';\n  reportes.push({\n    id_reporte: id,\n    fecha: String(r.fecha ?? ''),\n    rol,\n    causa_real: rol === 'operacion' ? '' : String(r.causa_real ?? '').trim(),\n    texto: texto.slice(0, 600)\n  });\n}\n\nreturn [{\n  json: {\n    reportes,\n    total: reportes.length,\n    descartados,\n    // wait_for_model evita el error 503 cuando el modelo esta \"frio\"\n    cuerpo_hf: { inputs: reportes.map(r => r.texto), options: { wait_for_model: true } }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        1056
+      ],
+      "id": "eda3b583-a975-4b52-8978-846291801328",
+      "name": "Preparar_Textos_NLP"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2/pipeline/feature-extraction",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.cuerpo_hf) }}",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "respuesta_hf"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        352,
+        1152
+      ],
+      "id": "38707551-e06f-4a6b-91c6-f14dc9b70fc6",
+      "name": "Embeddings_Transformer_HF",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "notes": "Credencial Header Auth: Name=Authorization, Value=Bearer <token HF de solo lectura>",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        560,
+        1056
+      ],
+      "id": "dd78a169-daab-4708-8839-580670c76c52",
+      "name": "Unir_Textos_Embeddings"
+    },
+    {
+      "parameters": {
+        "jsCode": "/*\n VISIONGUARD v2.2 - PARSEAR EMBEDDINGS  (nodo Code JS)\n Une la respuesta de Hugging Face (texto JSON) con los reportes y valida:\n   - que sea una lista con un vector por reporte,\n   - que todos los vectores tengan la misma dimension y sean numericos.\n Si algo falla, NO detiene el flujo: deja embeddings = null y el motivo,\n para que el nodo Python use solo las reglas y lo informe.\n*/\nconst d = $input.first().json;\nlet embeddings = null;\nlet motivo = '';\n\ntry {\n  if (d.error) throw new Error('HTTP: ' + String(d.error.message ?? d.error).slice(0, 160));\n  if (d.respuesta_hf == null) throw new Error('Sin respuesta de Hugging Face');\n  const v = typeof d.respuesta_hf === 'string' ? JSON.parse(d.respuesta_hf) : d.respuesta_hf;\n  if (!Array.isArray(v) || v.length !== (d.reportes || []).length) {\n    throw new Error(`Se esperaban ${(d.reportes || []).length} vectores y llegaron ${Array.isArray(v) ? v.length : 0}`);\n  }\n  const dim = v[0]?.length;\n  if (!dim || !v.every(x => Array.isArray(x) && x.length === dim && x.every(Number.isFinite))) {\n    throw new Error('Vectores con dimension o valores invalidos');\n  }\n  embeddings = v;\n} catch (e) {\n  motivo = e.message;\n}\n\nreturn [{\n  json: {\n    reportes: d.reportes || [],\n    descartados: d.descartados || [],\n    embeddings,\n    dimension: embeddings ? embeddings[0].length : 0,\n    motivo_sin_transformer: motivo\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        1056
+      ],
+      "id": "ae386e61-42ce-4f6e-9fc7-7c0ef614494b",
+      "name": "Parsear_Embeddings"
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "# VISIONGUARD v2.2 - CLASIFICACION NLP DE REPORTES DE NO CONFORMIDAD (nodo Code Python)\n#\n# Transformer: embeddings de paraphrase-multilingual-MiniLM-L12-v2 (calculados\n# en Hugging Face). Clasificador por CENTROIDE: promedio normalizado de los\n# reportes 'referencia' de cada causa; cada reporte va a la causa con mayor\n# similitud coseno.\n# Alternativa simple: reglas fijas de palabras clave (identicas a\n# python/nlp/nlp_comun.py).\n# Metricas: accuracy y F1 macro de AMBOS metodos sobre los reportes 'prueba'\n# (no usados para construir los centroides).\n#\n# Sin imports: el runner Python nativo de n8n restringe la biblioteca estandar.\n\nCLASES = [\"materia_prima\", \"ajuste_proceso\", \"herramienta_molde\",\n          \"operacion_manual\", \"medicion_inspeccion\"]\nREGLAS = {\n    \"materia_prima\": [\"porosidad\", \"poro\", \"inclusion\", \"aleacion\", \"colada\", \"lote de material\", \"impureza\"],\n    \"ajuste_proceso\": [\"temperatura\", \"presion\", \"parametro\", \"tiempo de ciclo\", \"velocidad\", \"enfriamiento\"],\n    \"herramienta_molde\": [\"molde\", \"matriz\", \"desgaste\", \"desgastad\", \"herramienta\", \"cavidad\"],\n    \"operacion_manual\": [\"operador\", \"golpe\", \"manipulacion\", \"caida\", \"procedimiento\", \"turno\"],\n    \"medicion_inspeccion\": [\"calibr\", \"medicion\", \"instrumento\", \"pie de metro\", \"micrometro\", \"galga\"],\n}\nSIN = \"sin_clasificar\"\nTILDES = str.maketrans(\"áéíóúüñÁÉÍÓÚÜÑ\", \"aeiouunaeiouun\")\n\n\ndef leer_entrada():\n    \"\"\"Compatible con el runner nativo (_items) y con el antiguo Pyodide (_input).\"\"\"\n    try:\n        datos = _items  # noqa: F821  (variable inyectada por n8n)\n    except NameError:\n        datos = _input.all()  # noqa: F821\n    item = datos[0]\n    j = item[\"json\"] if isinstance(item, dict) else item.json\n    return j.to_py() if hasattr(j, \"to_py\") else j\n\n\ndef por_reglas(texto):\n    t = str(texto).lower().translate(TILDES)\n    puntos = {c: sum(1 for k in REGLAS[c] if k in t) for c in CLASES}\n    mejor = max(CLASES, key=lambda c: puntos[c])\n    return mejor if puntos[mejor] > 0 else SIN\n\n\ndef unitario(v):\n    n = sum(x * x for x in v) ** 0.5\n    return [x / n for x in v] if n > 0 else v\n\n\ndef metricas(reales, pred):\n    n = len(reales)\n    if n == 0:\n        return {\"n\": 0, \"accuracy\": None, \"f1_macro\": None}\n    acc = sum(1 for r, p in zip(reales, pred) if r == p) / n\n    f1s = []\n    for c in CLASES:\n        tp = sum(1 for r, p in zip(reales, pred) if r == c and p == c)\n        fp = sum(1 for r, p in zip(reales, pred) if r != c and p == c)\n        fn = sum(1 for r, p in zip(reales, pred) if r == c and p != c)\n        pr = tp / (tp + fp) if tp + fp else 0.0\n        rc = tp / (tp + fn) if tp + fn else 0.0\n        f1s.append(2 * pr * rc / (pr + rc) if pr + rc else 0.0)\n    return {\"n\": n, \"accuracy\": round(acc, 4), \"f1_macro\": round(sum(f1s) / len(f1s), 4)}\n\n\nd = leer_entrada()\nreportes = d.get(\"reportes\") or []\nemb = d.get(\"embeddings\")\nusar_tf = bool(emb) and len(emb) == len(reportes)\nmotivo = d.get(\"motivo_sin_transformer\") or (\"\" if usar_tf else \"Sin embeddings\")\n\n# 1. Reglas para todos los reportes\nfor r in reportes:\n    r[\"causa_reglas\"] = por_reglas(r.get(\"texto\", \"\"))\n\n# 2. Transformer: centroides con los reportes de referencia\nif usar_tf:\n    vect = [unitario(v) for v in emb]\n    centroides = {}\n    for c in CLASES:\n        grupo = [vect[i] for i, r in enumerate(reportes) if r[\"rol\"] == \"referencia\" and r[\"causa_real\"] == c]\n        if grupo:\n            centroides[c] = unitario([sum(col) / len(grupo) for col in zip(*grupo)])\n    if len(centroides) < 2:\n        usar_tf, motivo = False, \"Menos de 2 causas con reportes de referencia\"\n    else:\n        for i, r in enumerate(reportes):\n            sims = {c: sum(a * b for a, b in zip(vect[i], cv)) for c, cv in centroides.items()}\n            mejor = max(sims, key=sims.get)\n            r[\"causa_transformer\"] = mejor\n            r[\"similitud\"] = round(sims[mejor], 4)\n\n# 3. Metricas en el conjunto de prueba (mismos datos para ambos metodos)\nprueba = [r for r in reportes if r[\"rol\"] == \"prueba\" and r[\"causa_real\"] in CLASES]\nreales = [r[\"causa_real\"] for r in prueba]\nm_reglas = metricas(reales, [r[\"causa_reglas\"] for r in prueba])\nm_tf = metricas(reales, [r.get(\"causa_transformer\", SIN) for r in prueba]) if usar_tf else None\nif m_tf and m_tf[\"accuracy\"] is not None and m_reglas[\"accuracy\"] is not None:\n    ganador = (\"Transformer\" if m_tf[\"f1_macro\"] > m_reglas[\"f1_macro\"]\n               else \"Reglas\" if m_tf[\"f1_macro\"] < m_reglas[\"f1_macro\"] else \"Empate\")\nelse:\n    ganador = \"No evaluable\"\n\n# 4. Reportes de operacion (los \"nuevos\" del turno)\noper = [r for r in reportes if r[\"rol\"] == \"operacion\"]\n# Navaja de Occam: para los reportes nuevos se usa el metodo con MEJOR F1 en\n# prueba en esta misma corrida (en la evaluacion offline ganaron las reglas).\nclave = \"causa_transformer\" if usar_tf and ganador == \"Transformer\" else \"causa_reglas\"\ndist = {}\nfor r in oper:\n    dist[r[clave]] = dist.get(r[clave], 0) + 1\nprincipal = max(dist, key=dist.get) if dist else \"sin_datos\"\nconcord = (round(100 * sum(1 for r in oper if r.get(\"causa_transformer\") == r[\"causa_reglas\"]) / len(oper), 1)\n           if usar_tf and oper else None)\ncasos = sorted(oper, key=lambda r: r.get(\"fecha\", \"\"), reverse=True)[:8]\n\nreturn [{\"json\": {\n    \"tipo\": \"NLP_TRANSFORMER\",\n    \"modulo\": \"Transformer_NLP_Clasificacion\",\n    \"transformer_ejecutado\": usar_tf,\n    \"modelo\": \"sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2\" if usar_tf else \"reglas_palabras_clave\",\n    \"metodo\": \"centroide_coseno_sobre_embeddings\" if usar_tf else \"reglas_palabras_clave\",\n    \"motivo_sin_transformer\": \"\" if usar_tf else motivo,\n    \"n_referencia\": sum(1 for r in reportes if r[\"rol\"] == \"referencia\"),\n    \"n_prueba\": len(prueba),\n    \"n_operacion\": len(oper),\n    \"metricas_prueba\": {\"transformer\": m_tf, \"reglas\": m_reglas},\n    \"mejor_metodo_en_prueba_f1\": ganador,\n    \"metodo_usado_operacion\": \"Transformer\" if clave == \"causa_transformer\" else \"Reglas\",\n    \"distribucion_causas_operacion\": dist,\n    \"causa_principal_operacion\": principal,\n    \"concordancia_transformer_reglas_pct\": concord,\n    \"casos_operacion\": [{\"id_reporte\": r[\"id_reporte\"], \"fecha\": r.get(\"fecha\", \"\"),\n                         \"causa_transformer\": r.get(\"causa_transformer\"), \"similitud\": r.get(\"similitud\"),\n                         \"causa_reglas\": r[\"causa_reglas\"]} for r in casos],\n    \"descartados_validacion\": d.get(\"descartados\") or [],\n    \"origen\": \"SIMULADO_ACADEMICO_NO_REAL\",\n}}]\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        1056
+      ],
+      "id": "a9019931-43ff-4260-85db-034c23a72fe2",
+      "name": "Clasificar_NLP_Python",
+      "notes": "Python (nativo). Si tu instancia no tiene Python, habilita Clasificar_NLP_JS_respaldo y deshabilita este.",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "/*\n VISIONGUARD v2.2 - CLASIFICACION NLP (RESPALDO EN JAVASCRIPT)\n Traduccion 1:1 de clasificar_nlp.py. Usar SOLO si la instancia n8n no\n permite Python: habilitar este nodo, deshabilitar Clasificar_NLP_Python y\n conectar este nodo a la entrada 4 del Merge.\n*/\nconst CLASES = ['materia_prima', 'ajuste_proceso', 'herramienta_molde', 'operacion_manual', 'medicion_inspeccion'];\nconst REGLAS = {\n  materia_prima: ['porosidad', 'poro', 'inclusion', 'aleacion', 'colada', 'lote de material', 'impureza'],\n  ajuste_proceso: ['temperatura', 'presion', 'parametro', 'tiempo de ciclo', 'velocidad', 'enfriamiento'],\n  herramienta_molde: ['molde', 'matriz', 'desgaste', 'desgastad', 'herramienta', 'cavidad'],\n  operacion_manual: ['operador', 'golpe', 'manipulacion', 'caida', 'procedimiento', 'turno'],\n  medicion_inspeccion: ['calibr', 'medicion', 'instrumento', 'pie de metro', 'micrometro', 'galga']\n};\nconst SIN = 'sin_clasificar';\nconst norm = t => String(t ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');\nconst porReglas = t => {\n  const s = norm(t);\n  const p = Object.fromEntries(CLASES.map(c => [c, REGLAS[c].filter(k => s.includes(k)).length]));\n  const mejor = CLASES.reduce((a, b) => (p[b] > p[a] ? b : a));\n  return p[mejor] > 0 ? mejor : SIN;\n};\nconst unit = v => { const n = Math.sqrt(v.reduce((s, x) => s + x * x, 0)); return n > 0 ? v.map(x => x / n) : v; };\nconst metricas = (reales, pred) => {\n  const n = reales.length;\n  if (!n) return { n: 0, accuracy: null, f1_macro: null };\n  const acc = reales.filter((r, i) => r === pred[i]).length / n;\n  const f1 = CLASES.map(c => {\n    const tp = reales.filter((r, i) => r === c && pred[i] === c).length;\n    const fp = reales.filter((r, i) => r !== c && pred[i] === c).length;\n    const fn = reales.filter((r, i) => r === c && pred[i] !== c).length;\n    const pr = tp + fp ? tp / (tp + fp) : 0, rc = tp + fn ? tp / (tp + fn) : 0;\n    return pr + rc ? 2 * pr * rc / (pr + rc) : 0;\n  });\n  return { n, accuracy: +acc.toFixed(4), f1_macro: +(f1.reduce((a, b) => a + b, 0) / f1.length).toFixed(4) };\n};\n\nconst d = $input.first().json;\nconst reportes = (d.reportes || []).map(r => ({ ...r, causa_reglas: porReglas(r.texto) }));\nlet usarTf = Array.isArray(d.embeddings) && d.embeddings.length === reportes.length && reportes.length > 0;\nlet motivo = d.motivo_sin_transformer || (usarTf ? '' : 'Sin embeddings');\n\nif (usarTf) {\n  const vect = d.embeddings.map(unit);\n  const cent = {};\n  for (const c of CLASES) {\n    const g = vect.filter((v, i) => reportes[i].rol === 'referencia' && reportes[i].causa_real === c);\n    if (g.length) cent[c] = unit(g[0].map((_, j) => g.reduce((s, v) => s + v[j], 0) / g.length));\n  }\n  if (Object.keys(cent).length < 2) { usarTf = false; motivo = 'Menos de 2 causas con reportes de referencia'; }\n  else reportes.forEach((r, i) => {\n    let mejor = null, sim = -2;\n    for (const [c, cv] of Object.entries(cent)) {\n      const s = vect[i].reduce((a, x, j) => a + x * cv[j], 0);\n      if (s > sim) { sim = s; mejor = c; }\n    }\n    r.causa_transformer = mejor; r.similitud = +sim.toFixed(4);\n  });\n}\n\nconst prueba = reportes.filter(r => r.rol === 'prueba' && CLASES.includes(r.causa_real));\nconst reales = prueba.map(r => r.causa_real);\nconst mReglas = metricas(reales, prueba.map(r => r.causa_reglas));\nconst mTf = usarTf ? metricas(reales, prueba.map(r => r.causa_transformer ?? SIN)) : null;\nconst ganador = mTf && mTf.accuracy !== null && mReglas.accuracy !== null\n  ? (mTf.f1_macro > mReglas.f1_macro ? 'Transformer' : mTf.f1_macro < mReglas.f1_macro ? 'Reglas' : 'Empate')\n  : 'No evaluable';\nconst oper = reportes.filter(r => r.rol === 'operacion');\n// Navaja de Occam: se usa el metodo con mejor F1 en prueba en esta corrida.\nconst clave = usarTf && ganador === 'Transformer' ? 'causa_transformer' : 'causa_reglas';\nconst dist = {};\noper.forEach(r => { dist[r[clave]] = (dist[r[clave]] || 0) + 1; });\nconst principal = Object.keys(dist).length ? Object.keys(dist).reduce((a, b) => (dist[b] > dist[a] ? b : a)) : 'sin_datos';\nconst concord = usarTf && oper.length\n  ? +(100 * oper.filter(r => r.causa_transformer === r.causa_reglas).length / oper.length).toFixed(1) : null;\n\nreturn [{ json: {\n  tipo: 'NLP_TRANSFORMER', modulo: 'Transformer_NLP_Clasificacion', transformer_ejecutado: usarTf,\n  modelo: usarTf ? 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2' : 'reglas_palabras_clave',\n  metodo: usarTf ? 'centroide_coseno_sobre_embeddings' : 'reglas_palabras_clave',\n  motivo_sin_transformer: usarTf ? '' : motivo,\n  n_referencia: reportes.filter(r => r.rol === 'referencia').length, n_prueba: prueba.length, n_operacion: oper.length,\n  metricas_prueba: { transformer: mTf, reglas: mReglas }, mejor_metodo_en_prueba_f1: ganador,\n  metodo_usado_operacion: clave === 'causa_transformer' ? 'Transformer' : 'Reglas',\n  distribucion_causas_operacion: dist, causa_principal_operacion: principal,\n  concordancia_transformer_reglas_pct: concord,\n  casos_operacion: [...oper].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 8)\n    .map(r => ({ id_reporte: r.id_reporte, fecha: r.fecha, causa_transformer: r.causa_transformer ?? null,\n                 similitud: r.similitud ?? null, causa_reglas: r.causa_reglas })),\n  descartados_validacion: d.descartados || [], origen: 'SIMULADO_ACADEMICO_NO_REAL'\n} }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        1248
+      ],
+      "id": "99979c07-8f0d-44c0-ada6-21d2e3ed72e6",
+      "name": "Clasificar_NLP_JS_respaldo",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2560,
+        672
+      ],
+      "id": "581a447b-5843-424a-97ee-1681e27b871e",
+      "name": "Loop_Inspecciones"
+    },
+    {
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Search files and folders1').all().find(i => i.json.name === $('Loop_Inspecciones').first().json.archivo)?.json.id }}"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "TU_FOLDER_ID_PROCESADAS",
+          "mode": "list",
+          "cachedResultName": "Inspecciones_Procesadas",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/TU_FOLDER_ID_PROCESADAS"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        3024,
+        400
+      ],
+      "id": "025386dc-2482-46c4-93c9-d59b2277d5cb",
+      "name": "Mover_A_Procesadas",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3104,
+        880
+      ],
+      "id": "e4db9c73-b79b-4d2b-b097-97ff367defd0",
+      "name": "Preparar_Registro_Final"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ (() => { const d = $('Preparar_Registro_Final').first().json; const icono = d.decision_humana === 'APROBAR' ? '✅' : (d.decision_humana === 'RECHAZAR' ? '⛔' : '⏰'); return `${icono} VISIONGUARD · DECISIÓN HUMANA\\n📁 ${d.archivo}\\n👤 ${d.decision_humana} → ${d.estado}\\n🕒 ${d.fecha_decision_humana}\\n📊 Panel: ${$('Config').first().json.dashboard_url}`; })() }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3680,
+        880
+      ],
+      "id": "b6b80a34-7589-4473-93a1-4b9ae5cc5197",
+      "name": "Notificacion_Final_Telegram",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## VisionGuard v2.2 · Hito 2\nDisparo por turno (07/15/23 h) → Config → 4 ramas en paralelo:\n1. ResNet18 (API Python ONNX)\n2. GRU (API Python Keras)\n3. NLP almacenado (Sheets)\n4. **Transformer NLP en vivo** (HF embeddings + Python)\n\nConfig contiene URLs del panel, destinatarios y umbrales.",
+        "height": 300,
+        "width": 520,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        -240
+      ],
+      "id": "2c18f676-fedb-4132-a443-7365607f2654",
+      "name": "Nota 57"
+    },
+    {
+      "parameters": {
+        "content": "## Control de alucinaciones\nValidacion_Seguridad_Final: parsea JSON, verifica 11 campos, fuerza reglas de seguridad, contrasta **cada cifra** del LLM con los datos y, si el JSON es inválido, usa un **análisis determinista de respaldo**. Nunca aprueba automáticamente.",
+        "height": 260,
+        "width": 560,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        300
+      ],
+      "id": "30ca568f-6455-4c84-8880-ca57f8c11b90",
+      "name": "Nota 58"
+    },
+    {
+      "parameters": {
+        "content": "## Punto de control humano\nUna aprobación por pieza (Loop). APROBAR / RECHAZAR por Gmail; sin respuesta en 8 h → SIN_RESPUESTA_HUMANA_ESCALAR. La decisión, su fecha y el estado se registran en Sheets y se notifican por Gmail + Telegram.",
+        "height": 220,
+        "width": 620,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2520,
+        1040
+      ],
+      "id": "a1dda372-7bc0-4c7f-b578-802decbcd492",
+      "name": "Nota 59"
+    },
+    {
+      "parameters": {
+        "content": "## Legado Hito 1 (deshabilitado)\n`Message a model` → `Code in JavaScript` → nodos v1.4. Se conservan como respaldo; ya no reciben datos.",
+        "height": 180,
+        "width": 520,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        -300
+      ],
+      "id": "89e3ea26-7666-41b4-ac8d-da425669509c",
+      "name": "Nota 60"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders1": {
+      "main": [
+        [
+          {
+            "node": "Hay_Imagenes_Pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Move file1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Move file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Telegram_API_Caida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resumen_GRU",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resumen_GRU": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Integracion_3_Modelos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Integracion_3_Modelos": {
+      "main": [
+        [
+          {
+            "node": "LLM_Integrado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lectura_NLP": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "LLM_Integrado": {
+      "main": [
+        [
+          {
+            "node": "Validacion_Seguridad_Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validacion_Seguridad_Final": {
+      "main": [
+        [
+          {
+            "node": "Preparar_Registro_Integrado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar_Registro_Integrado": {
+      "main": [
+        [
+          {
+            "node": "Evitar_Notificaciones_Duplicadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar_Analisis_Integrado": {
+      "main": [
+        [
+          {
+            "node": "Loop_Inspecciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evitar_Notificaciones_Duplicadas": {
+      "main": [
+        [
+          {
+            "node": "Guardar_Analisis_Integrado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aprobacion_Humana_Integrada": {
+      "main": [
+        [
+          {
+            "node": "Validar_Respuesta_Humana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar_Respuesta_Humana": {
+      "main": [
+        [
+          {
+            "node": "Preparar_Aprobacion_Humana",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar_Rechazo_Humano",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar_Aprobacion_Humana": {
+      "main": [
+        [
+          {
+            "node": "Preparar_Registro_Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar_Rechazo_Humano": {
+      "main": [
+        [
+          {
+            "node": "Preparar_Registro_Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request4": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar_Decision_Humana": {
+      "main": [
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lectura_NLP",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Leer_Reportes_NC",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hay_Imagenes_Pendientes": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aviso_Sin_Pendientes_Gmail",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Aviso_Sin_Pendientes_Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer_Reportes_NC": {
+      "main": [
+        [
+          {
+            "node": "Preparar_Textos_NLP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar_Textos_NLP": {
+      "main": [
+        [
+          {
+            "node": "Embeddings_Transformer_HF",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Unir_Textos_Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings_Transformer_HF": {
+      "main": [
+        [
+          {
+            "node": "Unir_Textos_Embeddings",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Unir_Textos_Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Parsear_Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear_Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Clasificar_NLP_Python",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clasificar_NLP_Python": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Loop_Inspecciones": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Notificacion_Analisis_Integrado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notificacion_Telegram_Integrado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Aprobacion_Humana_Integrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificacion_Analisis_Integrado": {
+      "main": [
+        [
+          {
+            "node": "Mover_A_Procesadas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar_Registro_Final": {
+      "main": [
+        [
+          {
+            "node": "Registrar_Decision_Humana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message2": {
+      "main": [
+        [
+          {
+            "node": "Notificacion_Final_Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificacion_Final_Telegram": {
+      "main": [
+        [
+          {
+            "node": "Loop_Inspecciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true
+  },
+  "nodeGroups": [],
+  "tags": []
+}

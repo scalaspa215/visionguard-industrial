@@ -1,0 +1,17 @@
+OK    VisionGuard_v2.2_Hito2_IMPORTAR.json: nombres de nodo unicos (61)
+OK    VisionGuard_v2.2_Hito2_IMPORTAR.json: conexiones validas 
+OK    VisionGuard_v2.2_Hito2_IMPORTAR.json: codigo y expresiones compilan 
+OK    VisionGuard_v2.2_Hito2_PUBLICO.json: nombres de nodo unicos (61)
+OK    VisionGuard_v2.2_Hito2_PUBLICO.json: conexiones validas 
+OK    VisionGuard_v2.2_Hito2_PUBLICO.json: codigo y expresiones compilan 
+OK    VisionGuard_v2.2_Hito2_PUBLICO.json: sin credenciales ni datos personales 
+OK    VisionGuard_v2.2_Error_Handler_PUBLICO.json: nombres de nodo unicos (3)
+OK    VisionGuard_v2.2_Error_Handler_PUBLICO.json: conexiones validas 
+OK    VisionGuard_v2.2_Error_Handler_PUBLICO.json: codigo y expresiones compilan 
+OK    VisionGuard_v2.2_Error_Handler_PUBLICO.json: sin credenciales ni datos personales 
+OK    Alerta Gmail de API caida habilitada
+OK    Rama legado H1 desconectada
+OK    Aprobacion humana dentro del bucle por pieza
+OK    Bucle cierra tras notificacion final
+OK    Dedupe antes de guardar
+OK    Nodo NLP en Python
