@@ -94,6 +94,8 @@ Workflow aparte: Error Trigger → Gmail + Telegram con nodo y mensaje del error
 
 **Código Python propio:** (1) API ResNet18: preprocesamiento, inferencia ONNX, softmax, regla de revisión (`python/apis/resnet18_api/app.py`). (2) API GRU: validación, normalización, inferencia y promedio móvil (`python/apis/series_gru_api/app.py`). (3) **Nodo Code en Python dentro de n8n**, `Clasificar_NLP_Python`: centroides de embeddings, similitud coseno, reglas, accuracy y F1 macro, escrito sin `import` para que corra en el runner nativo (`python/n8n_nodes/clasificar_nlp.py`). (4) Scripts de evaluación offline (`python/series`, `python/nlp`, `python/negocio`).
 
+![Figura 1. Flujo v2.2 en n8n, ejecución real 108 (success, 2 min 43 s).](../evidencias/capturas/01_n8n_ejecucion_108_real_success.png)
+
 ## 4. Modelos y comparación con la alternativa simple
 
 ### 4.1 Imágenes — ResNet18
@@ -149,6 +151,15 @@ El híbrido (reglas primero y Transformer solo si las reglas no clasifican) lleg
 
 **Consecuencia en el flujo:** para los reportes nuevos, `Clasificar_NLP_Python` usa el método con mejor F1 medido en cada corrida; hoy son las reglas, y queda registrado en `metodo_usado_operacion`. El Transformer sigue ejecutándose y midiéndose en cada turno.
 
+**Integración en el flujo y recuperación (RAG).** El Transformer se usa en n8n de dos maneras:
+1. **Embeddings.** Se calculan en vivo con Hugging Face. Si esa llamada falla (en las ejecuciones 106–108 respondió 401), se usa el **índice precalculado con el mismo modelo**: `embeddings_nc_minilm.json`, generado por `indexar_embeddings.py` y descargado desde GitHub por el nodo `Indice_Embeddings_GitHub`. Cada vector lleva un hash del texto para garantizar que el reporte no cambió desde la indexación. Con el índice, el nodo reproduce exactamente F1 0,347 (prueba unitaria 16).
+2. **Recuperación.** `Clasificar_NLP_Python` toma los 3 reportes de operación más cercanos (coseno) a la causa principal del turno y los entrega al LLM como `evidencia_documental`, con su id y un extracto. El prompt exige citarlos como `[NC-xxx]`, y `Validacion_Seguridad_Final` rechaza toda cita que no esté entre los documentos recuperados (prueba unitaria 12b).
+
+**Análisis de errores (40 reportes de prueba).**
+- **Transformer** (25 errores): la causa más afectada es *herramienta/molde* (8 de 8). Los errores se concentran en `operacion_manual` (7) y `ajuste_proceso` (6), causas cuyas paráfrasis comparten vocabulario ("pieza", "marca", "se cayó").
+- **Reglas** (23 errores): 15 son *sin clasificar*, porque las paráfrasis no traen palabras clave. La causa más afectada es *medición/inspección* (7).
+- **Para la decisión:** una causa mal asignada solo cambia el contexto que recibe el LLM, no la decisión sobre la pieza (que depende de ResNet18 y del inspector). Por eso el NLP se trata como antecedente y nunca como diagnóstico.
+
 **Mejoras para validar con datos reales:**
 - quitar el contexto común antes de calcular los embeddings;
 - usar más reportes de referencia por causa;
@@ -165,6 +176,10 @@ El híbrido (reglas primero y Transformer solo si las reglas no clasifican) lleg
 4. **Anti-alucinación numérica:** cada cifra del texto se contrasta con todos los números de la entrada (incluidas las conversiones a %). Las cifras no respaldadas se listan, se marca `alucinacion_sospechada` y se avisa en el correo y en el tablero.
 5. Se detectan frases de aprobación sin negación.
 6. Si el JSON es inválido o el nodo LLM falla tras 3 reintentos, se genera un **análisis determinista de respaldo** con prioridad alta y el flujo no se cae.
+7. **Citas RAG verificadas:** cada `[NC-xxx]` del texto debe estar entre los reportes recuperados; si no, se registra en `citas_inexistentes` y se marca `alucinacion_sospechada`.
+8. **"Sin información suficiente":** el prompt obliga a escribir esa frase en un campo cuando falta evidencia, en vez de suponer; la validación la acepta como contenido válido (prueba 12c).
+
+Todos estos mecanismos están demostrados en pruebas: unitarias 1–7, 12, 12b y 12c, y en n8n en las ejecuciones 101, 102, 107 y 108.
 
 **Ejemplo de salida (prueba unitaria 4, JSON del LLM truncado):**
 
@@ -195,6 +210,20 @@ El híbrido (reglas primero y Transformer solo si las reglas no clasifican) lleg
   - **Una pieza defectuosa nunca se aprueba automáticamente.**
 - **Sin duplicados:** la deduplicación ocurre **antes** de guardar, así que una nueva ejecución no pisa una decisión humana ya registrada.
 - **Imágenes procesadas:** se mueven a `Inspecciones_Procesadas`.
+- **Ubicación del control humano:** va **después** del análisis integrado y **antes** de las acciones con efecto (registrar la decisión, mover la pieza a procesadas, avisar la decisión final). Así el inspector decide con toda la evidencia a la vista y ninguna acción crítica ocurre sin su respuesta.
+- **Correcciones hechas con evidencia real:**
+  - nodo Python sin `hasattr` (ejecución 100);
+  - zona horaria `America/Santiago`;
+  - reintentos en Drive tras un `403 RATE_LIMIT_EXCEEDED` (ejecución 109);
+  - Telegram en modo HTML con escape, porque en Markdown los `_` de `VG_TEST_022` se volvían cursiva.
+
+![Figura 2. Gmail: informe integrado de VG_TEST_021 con alertas y botón al panel (ejecución real 107; correo tapado).](../evidencias/capturas/03_gmail_informe_VG_TEST_021.png)
+
+![Figura 3. Gmail: solicitud de validación humana con botones Approve/Decline y enlace al panel.](../evidencias/capturas/06_gmail_aprobacion_botones_approve_decline.png)
+
+![Figura 4. Gmail: decisión humana registrada (RECHAZAR, VG_TEST_021).](../evidencias/capturas/07_gmail_decision_final_RECHAZAR_VG_TEST_021.png)
+
+![Figura 5. Telegram: informes de VG_TEST_021 y VG_TEST_022 (ejecuciones reales 107 y 108).](../evidencias/capturas/08_telegram_informes_VG_TEST_021_y_022.png)
 
 ## 7. Tablero
 
@@ -216,6 +245,8 @@ El híbrido (reglas primero y Transformer solo si las reglas no clasifican) lleg
 - **Tablas de evidencia** de los modelos.
 
 Se complementa con el dashboard de Colab existente (`notebooks/VisionGuard_Dashboard_Colab.ipynb`). Se eligió Sheets porque es publicable y su enlace se abre desde el móvil al tocar el aviso.
+
+![Figura 6. Tablero en Google Sheets: filtros, KPIs y 9 gráficos alimentados por el flujo.](../evidencias/capturas/04_sheets_dashboard_filtros_kpis_graficos.png)
 
 ## 8. Evaluación de negocio (estimación académica)
 
@@ -242,6 +273,8 @@ El 36,5 % del equipo se conserva como escenario base. Como sus supuestos no esta
 - Los costos de API escalan con el volumen de imágenes.
 - Las horas "ahorradas" solo son beneficio si se reasignan a otra tarea.
 - El ROI es sensible al costo por escape, que es el supuesto más incierto.
+
+![Figura 7. ROI del año 1 por escenario y sensibilidad a las horas ahorradas.](roi_escenarios.png)
 
 ## 9. Riesgos, sesgos y ética
 
@@ -302,3 +335,17 @@ El 36,5 % del equipo se conserva como escenario base. Como sus supuestos no esta
 - No hay calibración probabilística de ResNet18.
 - El LLM analiza todas las imágenes de una ejecución en una sola llamada; con muchas imágenes por turno convendría una llamada por pieza.
 - El ROI es una estimación académica.
+
+## 12. Referencias
+
+1. Dabhi, R. (2020). *Casting product image data for quality inspection* [conjunto de datos]. Kaggle. kaggle.com/datasets/ravirajsinh45/real-life-industrial-dataset-of-casting-product
+2. He, K., Zhang, X., Ren, S. y Sun, J. (2016). Deep Residual Learning for Image Recognition. *CVPR*.
+3. Tan, M. y Le, Q. (2019). EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks. *ICML*.
+4. Howard, A. et al. (2019). Searching for MobileNetV3. *ICCV*.
+5. Cho, K. et al. (2014). Learning Phrase Representations using RNN Encoder–Decoder (GRU). *EMNLP*.
+6. Hyndman, R. J. y Athanasopoulos, G. (2021). *Forecasting: Principles and Practice* (3.ª ed.). OTexts.
+7. Reimers, N. y Gurevych, I. (2020). Making Monolingual Sentence Embeddings Multilingual using Knowledge Distillation. *EMNLP* (modelo paraphrase-multilingual-MiniLM-L12-v2).
+8. Lewis, P. et al. (2020). Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks. *NeurIPS*.
+9. McNemar, Q. (1947). Note on the sampling error of the difference between correlated proportions. *Psychometrika*, 12(2).
+10. Page, E. S. (1954). Continuous Inspection Schemes (CUSUM). *Biometrika*, 41(1/2).
+11. n8n GmbH (2026). Documentación de n8n: Code node, Wait/Send and Wait, Error Trigger. docs.n8n.io

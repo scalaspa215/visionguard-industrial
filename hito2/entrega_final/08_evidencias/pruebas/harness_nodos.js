@@ -116,6 +116,18 @@ caso('11 Dos imagenes -> dos filas con claves distintas y alertas por imagen', (
   return { ok: a.clave_unica !== b.clave_unica && a.alertas.includes('A.jpeg') && !b.alertas.includes('A.jpeg'),
     detalle: [a.clave_unica, b.clave_unica, b.alertas] };
 });
+caso('12b Cita RAG valida y cita inventada', () => {
+  const nlpEv = { ...nlpOk, evidencia_documental: [{ id_reporte: 'NC-093', extracto: 'poros', relevancia: 0.8 }] };
+  const ok1 = cadena([img('VG_C1.jpeg', 'Defectuosa', 0.9963, false)], llmResp({ ...base, resumen_nlp: 'Antecedente [NC-093] de porosidad.' }), nlpEv);
+  const ko = cadena([img('VG_C2.jpeg', 'Defectuosa', 0.9963, false)], llmResp({ ...base, resumen_nlp: 'Ver [NC-999] y [NC-093].' }), nlpEv);
+  return { ok: ok1.val.controles_seguridad.citas_validas[0] === 'NC-093' && !ok1.val.controles_seguridad.alucinacion_sospechada &&
+    ko.val.controles_seguridad.citas_inexistentes[0] === 'NC-999' && ko.val.controles_seguridad.alucinacion_sospechada,
+    detalle: [ok1.val.controles_seguridad.citas_validas, ko.val.controles_seguridad.citas_inexistentes] };
+});
+caso('12c Campo con "Sin información suficiente" se acepta', () => {
+  const r = cadena([img('VG_C3.jpeg', 'Correcta', 0.99, false)], llmResp({ ...base, prioridad: 'baja', resumen_nlp: 'Sin información suficiente' }));
+  return { ok: r.val.fuente_analisis === 'LLM_VALIDADO' && r.val.resumen_nlp === 'Sin información suficiente', detalle: r.val.fuente_analisis };
+});
 caso('12 Respuesta envuelta en ```json``` se acepta', () => {
   const r = cadena([img('VG_T12.jpeg', 'Defectuosa', 0.99, false)], llmResp('```json\n' + JSON.stringify(base) + '\n```'));
   return { ok: r.val.fuente_analisis === 'LLM_VALIDADO', detalle: r.val.fuente_analisis };
@@ -130,15 +142,28 @@ const prep = ejecutar('preparar_textos_nlp.js', filas, {});
 const vocab = [...new Set(prep[0].reportes.flatMap(r => r.texto.toLowerCase().split(/\W+/)))];
 const bow = t => { const s = t.toLowerCase().split(/\W+/); return vocab.map(v => s.filter(x => x === v).length); };
 const unido = { ...prep[0], respuesta_hf: JSON.stringify(prep[0].reportes.map(r => bow(r.texto))) };
-const pars = ejecutar('parsear_embeddings.js', [unido], {});
+const pars = ejecutar('parsear_embeddings.js', [{ error: { message: 'no usado' } }], { Unir_Textos_Embeddings: [unido] });
 const nlpJs = ejecutar('clasificar_nlp_respaldo.js', pars, {});
-const parsMal = ejecutar('parsear_embeddings.js', [{ ...prep[0], error: { message: '401 Unauthorized' } }], {});
+const parsMal = ejecutar('parsear_embeddings.js', [{ error: { message: 'GitHub caido' } }], { Unir_Textos_Embeddings: [{ ...prep[0], error: { message: '401 Unauthorized' } }] });
+// Indice MiniLM real (generado por indexar_embeddings.py) con HF caido
+const indice = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'python', 'nlp', 'embeddings_nc_minilm.json'), 'utf8'));
+const parsIdx = ejecutar('parsear_embeddings.js', [indice], { Unir_Textos_Embeddings: [{ ...prep[0], error: { message: '401 Unauthorized' } }] });
+const nlpIdx = ejecutar('clasificar_nlp_respaldo.js', parsIdx, {});
+// Indice servido como texto plano (como raw.githubusercontent.com en n8n)
+const parsIdxTxt = ejecutar('parsear_embeddings.js', [{ data: JSON.stringify(indice) }], { Unir_Textos_Embeddings: [{ ...prep[0], error: { message: '401' } }] });
+fs.writeFileSync(path.join(__dirname, 'entrada_python_nlp_indice.json'), JSON.stringify(parsIdx[0]));
+fs.writeFileSync(path.join(__dirname, 'salida_js_nlp_indice.json'), JSON.stringify(nlpIdx[0]));
 const nlpSinTf = ejecutar('clasificar_nlp_respaldo.js', parsMal, {});
 caso('13 Preparar NLP descarta fila vacia y duplicado', () => ({ ok: prep[0].total === 110 && prep[0].descartados.length === 2, detalle: prep[0].descartados }));
 caso('14 NLP JS con embeddings sinteticos produce metricas', () => ({ ok: nlpJs[0].transformer_ejecutado && nlpJs[0].metricas_prueba.reglas.accuracy === 0.425,
   detalle: nlpJs[0].metricas_prueba }));
-caso('15 NLP sin token HF -> solo reglas', () => ({ ok: nlpSinTf[0].transformer_ejecutado === false && nlpSinTf[0].motivo_sin_transformer.includes('401'),
+caso('15 NLP sin HF ni indice -> solo reglas', () => ({ ok: nlpSinTf[0].transformer_ejecutado === false && nlpSinTf[0].motivo_sin_transformer.includes('401'),
   detalle: nlpSinTf[0].motivo_sin_transformer }));
+caso('16 HF caido + indice MiniLM real -> Transformer (F1 0.3469 como offline)', () => ({ ok: parsIdx[0].origen_embeddings === 'INDICE_PRECALCULADO' && nlpIdx[0].transformer_ejecutado && nlpIdx[0].metricas_prueba.transformer.f1_macro === 0.3469,
+  detalle: { origen: parsIdx[0].origen_embeddings, m: nlpIdx[0].metricas_prueba, usado: nlpIdx[0].metodo_usado_operacion } }));
+caso('16b Indice recibido como texto (data) se parsea', () => ({ ok: parsIdxTxt[0].origen_embeddings === 'INDICE_PRECALCULADO', detalle: parsIdxTxt[0].origen_embeddings }));
+caso('17 RAG: evidencia documental recuperada (3 reportes con extracto)', () => ({ ok: nlpIdx[0].evidencia_documental.length === 3 && nlpIdx[0].evidencia_documental.every(e => /^NC-\d{3}$/.test(e.id_reporte) && e.extracto),
+  detalle: nlpIdx[0].evidencia_documental.map(e => e.id_reporte + ' ' + e.relevancia) }));
 fs.writeFileSync(path.join(__dirname, 'entrada_python_nlp.json'), JSON.stringify(pars[0]));
 fs.writeFileSync(path.join(__dirname, 'salida_js_nlp.json'), JSON.stringify(nlpJs[0]));
 

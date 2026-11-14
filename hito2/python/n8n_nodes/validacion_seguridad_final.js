@@ -80,6 +80,9 @@ permitidos.add(100);
 
 let noRespaldados = [];
 let frasesAprobacion = [];
+let citasInexistentes = [];
+let citasValidas = [];
+const idsDisponibles = new Set((nlp.evidencia_documental || []).map(e => e.id_reporte));
 if (a && fallas.length === 0) {
   const texto = TEXTOS.map(c => a[c]).join(' ');
   noRespaldados = [...new Set((texto.match(/\d+(?:[.,]\d+)?/g) || []))]
@@ -88,9 +91,14 @@ if (a && fallas.length === 0) {
     .map(({ s }) => s);
   frasesAprobacion = (texto.match(/.{0,30}\baprobad[ao]s?\b/gi) || [])
     .filter(f => !/\b(no|nunca|sin|ninguna|ningun)\b|automatic|definitiv/i.test(f));
-  if (noRespaldados.length || frasesAprobacion.length) {
+  // Citas RAG: todo [NC-xxx] mencionado debe estar entre los documentos recuperados
+  const citas = [...new Set(texto.match(/NC-\d{3}/g) || [])];
+  citasValidas = citas.filter(c => idsDisponibles.has(c));
+  citasInexistentes = citas.filter(c => !idsDisponibles.has(c));
+  if (noRespaldados.length || frasesAprobacion.length || citasInexistentes.length) {
     a.riesgos_limitaciones += ' [CONTROL AUTOMATICO: ' +
       (noRespaldados.length ? `cifras sin respaldo en los datos: ${noRespaldados.join(', ')}. ` : '') +
+      (citasInexistentes.length ? `citas a reportes no recuperados: ${citasInexistentes.join(', ')}. ` : '') +
       (frasesAprobacion.length ? 'se detecto una frase de aprobacion sin negacion; NO hay aprobacion automatica. ' : '') +
       'Verificar contra el panel antes de decidir.]';
   }
@@ -135,7 +143,10 @@ return [{
       correcciones_aplicadas: correcciones,
       cifras_no_respaldadas: noRespaldados,
       frases_aprobacion_sospechosas: frasesAprobacion,
-      alucinacion_sospechada: noRespaldados.length > 0 || frasesAprobacion.length > 0,
+      citas_validas: citasValidas,
+      citas_inexistentes: citasInexistentes,
+      documentos_recuperados: [...idsDisponibles],
+      alucinacion_sospechada: noRespaldados.length > 0 || frasesAprobacion.length > 0 || citasInexistentes.length > 0,
       revision_humana_obligatoria: true,
       aprobacion_automatica_bloqueada: true,
       validacion_humana_realizada: false

@@ -53,6 +53,13 @@ while i < len(lineas):
                     if f == 0:
                         r.bold = True
         continue
+    elif re.match(r"^!\[(.*)\]\((.+)\)", l):
+        cap, ruta = re.match(r"^!\[(.*)\]\((.+)\)", l).groups()
+        img = (AQUI / ruta).resolve()
+        if img.exists():
+            from docx.shared import Inches
+            doc.add_picture(str(img), width=Inches(6.0))
+            pc = doc.add_paragraph(); r = pc.add_run(cap); r.italic = True; r.font.size = Pt(8.5)
     elif l.startswith("#"):
         nivel = len(l) - len(l.lstrip("#"))
         doc.add_heading(l.lstrip("# ").strip(), level=min(nivel, 3))

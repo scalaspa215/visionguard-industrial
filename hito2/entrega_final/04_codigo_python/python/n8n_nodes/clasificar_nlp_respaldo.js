@@ -74,6 +74,23 @@ const principal = Object.keys(dist).length ? Object.keys(dist).reduce((a, b) => 
 const concord = usarTf && oper.length
   ? +(100 * oper.filter(r => r.causa_transformer === r.causa_reglas).length / oper.length).toFixed(1) : null;
 
+// Recuperacion (RAG): 3 reportes de operacion mas cercanos a la causa principal
+let evidencia = [];
+if (principal !== 'sin_datos') {
+  const vect = usarTf ? d.embeddings.map(unit) : null;
+  const centP = usarTf ? (() => {
+    const g = vect.filter((v, i) => reportes[i].rol === 'referencia' && reportes[i].causa_real === principal);
+    return g.length ? unit(g[0].map((_, j) => g.reduce((s, v) => s + v[j], 0) / g.length)) : null;
+  })() : null;
+  const cand = reportes.map((r, i) => ({ r, i })).filter(x => x.r.rol === 'operacion').map(({ r, i }) => ({
+    r, s: centP ? vect[i].reduce((a, x, j) => a + x * centP[j], 0) : (r.causa_reglas === principal ? 1 : 0)
+  }));
+  evidencia = cand.sort((a, b) => b.s - a.s).slice(0, 3).filter(x => x.s > 0).map(({ r, s }) => ({
+    id_reporte: r.id_reporte, fecha: r.fecha, causa_asignada: r[clave], relevancia: +s.toFixed(4),
+    extracto: String(r.texto ?? '').slice(0, 200)
+  }));
+}
+
 return [{ json: {
   tipo: 'NLP_TRANSFORMER', modulo: 'Transformer_NLP_Clasificacion', transformer_ejecutado: usarTf,
   modelo: usarTf ? 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2' : 'reglas_palabras_clave',
@@ -87,5 +104,6 @@ return [{ json: {
   casos_operacion: [...oper].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 8)
     .map(r => ({ id_reporte: r.id_reporte, fecha: r.fecha, causa_transformer: r.causa_transformer ?? null,
                  similitud: r.similitud ?? null, causa_reglas: r.causa_reglas })),
+  origen_embeddings: d.origen_embeddings || (usarTf ? 'HF_EN_VIVO' : 'NINGUNO'), evidencia_documental: evidencia,
   descartados_validacion: d.descartados || [], origen: 'SIMULADO_ACADEMICO_NO_REAL'
 } }];

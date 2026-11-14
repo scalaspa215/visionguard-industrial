@@ -40,7 +40,10 @@
         0
       ],
       "id": "af0d6860-2588-490e-b98e-7d063a6081fc",
-      "name": "Search files and folders"
+      "name": "Search files and folders",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -58,7 +61,10 @@
       ],
       "id": "d3426b93-33f0-44b4-ad0d-f396a0f5d4cd",
       "name": "Search files and folders1",
-      "alwaysOutputData": true
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -77,7 +83,10 @@
         -96
       ],
       "id": "5efa34e1-66f2-4f6e-85ad-8c7a6258f52b",
-      "name": "Download file"
+      "name": "Download file",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -761,7 +770,7 @@
     },
     {
       "parameters": {
-        "jsCode": "/*\n VISIONGUARD INDUSTRIAL v2.2 - INTEGRACION DE 3 MODELOS (nodo Code JS)\n ResNet18 (imagen) + GRU (serie temporal) + Transformer NLP (texto)\n Construye el RESUMEN ESTRUCTURADO que recibe el LLM (nunca la tabla cruda)\n y calcula las alertas condicionales con los umbrales de Config.\n*/\nconst cfg = $('Config').first().json;\n\n// Lee un nodo sin romper si no se ejecuto en esta corrida (p. ej. sin imagenes).\nfunction leer(nodo) {\n  try { return $(nodo).all().map(i => i.json); } catch (e) { return []; }\n}\nconst esVerdadero = v => v === true || String(v ?? '').trim().toLowerCase() === 'true';\nconst esFalso = v => v === false || String(v ?? '').trim().toLowerCase() === 'false';\n\nconst datosResNet = leer('HTTP Request');\nconst imagenes = datosResNet.filter(d =>\n  ['correcta', 'defectuosa'].includes(String(d.clasificacion ?? '').trim().toLowerCase()));\nconst erroresInferencia = datosResNet.length - imagenes.length;\n\n// Sin imagenes validas: la rama Hay_Imagenes_Pendientes ya envio el aviso del turno.\nif (imagenes.length === 0) return [];\n\nconst gru = leer('Resumen_GRU').find(d => d.tipo === 'RESUMEN_GRU');\nif (!gru) throw new Error('Integracion incompleta: falta el resumen GRU (API de series).');\n\nconst nlpTf = leer('Clasificar_NLP_Python')[0] || leer('Clasificar_NLP_JS_respaldo')[0] || null;\nconst nlpHistorico = leer('Lectura_NLP').filter(d => d.id_caso && String(d.modulo ?? '').trim() === 'Transformer_NLP');\n\nconst umbralConf = Number(cfg.umbral_confianza ?? 0.9);\nconst umbralPron = Number(cfg.umbral_pronostico_pct ?? 7.5);\nconst umbralDisc = Number(cfg.umbral_discrepancia_pp ?? 1.5);\n\n// 1. ResNet18 con regla de seguridad: defectuosa => revision humana\nconst resultadosImagenes = imagenes.map(d => {\n  const clasificacion = String(d.clasificacion).trim();\n  const esDefectuosa = clasificacion.toLowerCase() === 'defectuosa';\n  return {\n    archivo: d.archivo,\n    modelo: d.modelo ?? 'ResNet18',\n    clasificacion,\n    confianza: Number(d.confianza),\n    probabilidad_defecto: Number(d.probabilidades?.defectuosa),\n    decision_sugerida: d.decision_sugerida,\n    requiere_revision_humana_reportada: d.requiere_revision_humana,\n    requiere_revision_humana: esDefectuosa || esVerdadero(d.requiere_revision_humana),\n    aprobacion_automatica: false\n  };\n});\n\n// 2. Alertas condicionales (cada una con su regla explicita)\nconst alertas = [];\nfor (const im of resultadosImagenes) {\n  if (im.clasificacion.toLowerCase() === 'defectuosa')\n    alertas.push({ tipo: 'PIEZA_DEFECTUOSA', detalle: `${im.archivo} clasificada Defectuosa` });\n  if (Number.isFinite(im.confianza) && im.confianza < umbralConf)\n    alertas.push({ tipo: 'CONFIANZA_BAJA', detalle: `${im.archivo}: confianza ${(im.confianza * 100).toFixed(2)} % < ${umbralConf * 100} %` });\n  if (im.clasificacion.toLowerCase() === 'defectuosa' && esFalso(im.requiere_revision_humana_reportada))\n    alertas.push({ tipo: 'INCONSISTENCIA_API', detalle: `${im.archivo}: defectuosa sin revision exigida por la API; se fuerza revision humana` });\n}\nfor (const p of gru.pronosticos ?? []) {\n  if (Number(p.gru_pct) >= umbralPron)\n    alertas.push({ tipo: 'PRONOSTICO_SOBRE_UMBRAL', detalle: `Linea ${p.linea}: GRU ${p.gru_pct} % >= ${umbralPron} % (simulado)` });\n  if (Math.abs(Number(p.gru_pct) - Number(p.promedio_movil_pct)) >= umbralDisc)\n    alertas.push({ tipo: 'DISCREPANCIA_MODELOS_SERIE', detalle: `Linea ${p.linea}: GRU ${p.gru_pct} % vs promedio movil ${p.promedio_movil_pct} %` });\n}\nif (erroresInferencia > 0)\n  alertas.push({ tipo: 'ERROR_INFERENCIA_IMAGEN', detalle: `${erroresInferencia} imagen(es) sin resultado valido de la API` });\nif (!nlpTf || nlpTf.transformer_ejecutado !== true)\n  alertas.push({ tipo: 'NLP_TRANSFORMER_NO_DISPONIBLE', detalle: nlpTf?.motivo_sin_transformer || 'Sin resultado NLP; solo reglas o sin datos' });\n\n// 3. Resumen NLP compacto (resultados, no textos crudos)\nconst nlp = nlpTf ? {\n  transformer_ejecutado: nlpTf.transformer_ejecutado,\n  modelo: nlpTf.modelo,\n  metodo: nlpTf.metodo,\n  metricas_prueba: nlpTf.metricas_prueba,\n  mejor_metodo_en_prueba_f1: nlpTf.mejor_metodo_en_prueba_f1,\n  metodo_usado_operacion: nlpTf.metodo_usado_operacion,\n  n_operacion: nlpTf.n_operacion,\n  distribucion_causas_operacion: nlpTf.distribucion_causas_operacion,\n  causa_principal_operacion: nlpTf.causa_principal_operacion,\n  concordancia_transformer_reglas_pct: nlpTf.concordancia_transformer_reglas_pct,\n  casos_operacion: (nlpTf.casos_operacion || []).slice(0, 5)\n} : { transformer_ejecutado: false, causa_principal_operacion: 'sin_datos' };\n\nreturn [{\n  json: {\n    sistema: 'VisionGuard Industrial',\n    tipo: 'ANALISIS_INTEGRADO',\n    origen: 'PROTOTIPO_ACADEMICO_CON_DATOS_SIMULADOS',\n    modelos_integrados: ['ResNet18', 'GRU', 'Transformer_NLP'],\n    resumen_integracion: {\n      total_imagenes: resultadosImagenes.length,\n      total_defectuosas: resultadosImagenes.filter(d => d.clasificacion.toLowerCase() === 'defectuosa').length,\n      total_lineas: gru.total_lineas,\n      linea_mayor_pronostico: gru.linea_mayor_pronostico,\n      mayor_pronostico_pct: gru.mayor_pronostico_pct,\n      total_casos_nlp: nlpHistorico.length,\n      total_alertas: alertas.length\n    },\n    imagenes: resultadosImagenes,\n    series_temporales: gru,\n    nlp_transformer: nlp,\n    analisis_nlp: nlpHistorico.slice(0, 5).map(d => ({\n      id_caso: d.id_caso, recomendacion: d.recomendacion_original,\n      accion_sugerida: d.accion_sugerida, estado: d.estado\n    })),\n    alertas,\n    umbrales: { confianza: umbralConf, pronostico_pct: umbralPron, discrepancia_pp: umbralDisc },\n    advertencias: [\n      'Los datos GRU y los reportes NC son simulados con fines academicos.',\n      'Los pronosticos GRU no son mediciones en tiempo real.',\n      'Los reportes NC no necesariamente corresponden a las imagenes analizadas.',\n      'Una clasificacion Correcta no constituye aprobacion definitiva.',\n      'Toda pieza defectuosa requiere revision humana.',\n      'Ninguna pieza puede aprobarse automaticamente.'\n    ],\n    requiere_validacion_humana: true,\n    aprobacion_automatica: false,\n    estado: 'PENDIENTE_VALIDACION_HUMANA'\n  }\n}];\n"
+        "jsCode": "/*\n VISIONGUARD INDUSTRIAL v2.2 - INTEGRACION DE 3 MODELOS (nodo Code JS)\n ResNet18 (imagen) + GRU (serie temporal) + Transformer NLP (texto)\n Construye el RESUMEN ESTRUCTURADO que recibe el LLM (nunca la tabla cruda)\n y calcula las alertas condicionales con los umbrales de Config.\n*/\nconst cfg = $('Config').first().json;\n\n// Lee un nodo sin romper si no se ejecuto en esta corrida (p. ej. sin imagenes).\nfunction leer(nodo) {\n  try { return $(nodo).all().map(i => i.json); } catch (e) { return []; }\n}\nconst esVerdadero = v => v === true || String(v ?? '').trim().toLowerCase() === 'true';\nconst esFalso = v => v === false || String(v ?? '').trim().toLowerCase() === 'false';\n\nconst datosResNet = leer('HTTP Request');\nconst imagenes = datosResNet.filter(d =>\n  ['correcta', 'defectuosa'].includes(String(d.clasificacion ?? '').trim().toLowerCase()));\nconst erroresInferencia = datosResNet.length - imagenes.length;\n\n// Sin imagenes validas: la rama Hay_Imagenes_Pendientes ya envio el aviso del turno.\nif (imagenes.length === 0) return [];\n\nconst gru = leer('Resumen_GRU').find(d => d.tipo === 'RESUMEN_GRU');\nif (!gru) throw new Error('Integracion incompleta: falta el resumen GRU (API de series).');\n\nconst nlpTf = leer('Clasificar_NLP_Python')[0] || leer('Clasificar_NLP_JS_respaldo')[0] || null;\nconst nlpHistorico = leer('Lectura_NLP').filter(d => d.id_caso && String(d.modulo ?? '').trim() === 'Transformer_NLP');\n\nconst umbralConf = Number(cfg.umbral_confianza ?? 0.9);\nconst umbralPron = Number(cfg.umbral_pronostico_pct ?? 7.5);\nconst umbralDisc = Number(cfg.umbral_discrepancia_pp ?? 1.5);\n\n// 1. ResNet18 con regla de seguridad: defectuosa => revision humana\nconst resultadosImagenes = imagenes.map(d => {\n  const clasificacion = String(d.clasificacion).trim();\n  const esDefectuosa = clasificacion.toLowerCase() === 'defectuosa';\n  return {\n    archivo: d.archivo,\n    modelo: d.modelo ?? 'ResNet18',\n    clasificacion,\n    confianza: Number(d.confianza),\n    probabilidad_defecto: Number(d.probabilidades?.defectuosa),\n    decision_sugerida: d.decision_sugerida,\n    requiere_revision_humana_reportada: d.requiere_revision_humana,\n    requiere_revision_humana: esDefectuosa || esVerdadero(d.requiere_revision_humana),\n    aprobacion_automatica: false\n  };\n});\n\n// 2. Alertas condicionales (cada una con su regla explicita)\nconst alertas = [];\nfor (const im of resultadosImagenes) {\n  if (im.clasificacion.toLowerCase() === 'defectuosa')\n    alertas.push({ tipo: 'PIEZA_DEFECTUOSA', detalle: `${im.archivo} clasificada Defectuosa` });\n  if (Number.isFinite(im.confianza) && im.confianza < umbralConf)\n    alertas.push({ tipo: 'CONFIANZA_BAJA', detalle: `${im.archivo}: confianza ${(im.confianza * 100).toFixed(2)} % < ${umbralConf * 100} %` });\n  if (im.clasificacion.toLowerCase() === 'defectuosa' && esFalso(im.requiere_revision_humana_reportada))\n    alertas.push({ tipo: 'INCONSISTENCIA_API', detalle: `${im.archivo}: defectuosa sin revision exigida por la API; se fuerza revision humana` });\n}\nfor (const p of gru.pronosticos ?? []) {\n  if (Number(p.gru_pct) >= umbralPron)\n    alertas.push({ tipo: 'PRONOSTICO_SOBRE_UMBRAL', detalle: `Linea ${p.linea}: GRU ${p.gru_pct} % >= ${umbralPron} % (simulado)` });\n  if (Math.abs(Number(p.gru_pct) - Number(p.promedio_movil_pct)) >= umbralDisc)\n    alertas.push({ tipo: 'DISCREPANCIA_MODELOS_SERIE', detalle: `Linea ${p.linea}: GRU ${p.gru_pct} % vs promedio movil ${p.promedio_movil_pct} %` });\n}\nif (erroresInferencia > 0)\n  alertas.push({ tipo: 'ERROR_INFERENCIA_IMAGEN', detalle: `${erroresInferencia} imagen(es) sin resultado valido de la API` });\nif (!nlpTf || nlpTf.transformer_ejecutado !== true)\n  alertas.push({ tipo: 'NLP_TRANSFORMER_NO_DISPONIBLE', detalle: nlpTf?.motivo_sin_transformer || 'Sin resultado NLP; solo reglas o sin datos' });\n\n// 3. Resumen NLP compacto (resultados, no textos crudos)\nconst nlp = nlpTf ? {\n  transformer_ejecutado: nlpTf.transformer_ejecutado,\n  modelo: nlpTf.modelo,\n  metodo: nlpTf.metodo,\n  metricas_prueba: nlpTf.metricas_prueba,\n  mejor_metodo_en_prueba_f1: nlpTf.mejor_metodo_en_prueba_f1,\n  metodo_usado_operacion: nlpTf.metodo_usado_operacion,\n  n_operacion: nlpTf.n_operacion,\n  distribucion_causas_operacion: nlpTf.distribucion_causas_operacion,\n  causa_principal_operacion: nlpTf.causa_principal_operacion,\n  concordancia_transformer_reglas_pct: nlpTf.concordancia_transformer_reglas_pct,\n  origen_embeddings: nlpTf.origen_embeddings,\n  // Documentos recuperados (RAG): el LLM debe citarlos como [NC-xxx]\n  evidencia_documental: nlpTf.evidencia_documental || []\n} : { transformer_ejecutado: false, causa_principal_operacion: 'sin_datos', evidencia_documental: [] };\n\nreturn [{\n  json: {\n    sistema: 'VisionGuard Industrial',\n    tipo: 'ANALISIS_INTEGRADO',\n    origen: 'PROTOTIPO_ACADEMICO_CON_DATOS_SIMULADOS',\n    modelos_integrados: ['ResNet18', 'GRU', 'Transformer_NLP'],\n    resumen_integracion: {\n      total_imagenes: resultadosImagenes.length,\n      total_defectuosas: resultadosImagenes.filter(d => d.clasificacion.toLowerCase() === 'defectuosa').length,\n      total_lineas: gru.total_lineas,\n      linea_mayor_pronostico: gru.linea_mayor_pronostico,\n      mayor_pronostico_pct: gru.mayor_pronostico_pct,\n      total_casos_nlp: nlpHistorico.length,\n      total_alertas: alertas.length\n    },\n    imagenes: resultadosImagenes,\n    series_temporales: gru,\n    nlp_transformer: nlp,\n    analisis_nlp: nlpHistorico.slice(0, 5).map(d => ({\n      id_caso: d.id_caso, recomendacion: d.recomendacion_original,\n      accion_sugerida: d.accion_sugerida, estado: d.estado\n    })),\n    alertas,\n    umbrales: { confianza: umbralConf, pronostico_pct: umbralPron, discrepancia_pp: umbralDisc },\n    advertencias: [\n      'Los datos GRU y los reportes NC son simulados con fines academicos.',\n      'Los pronosticos GRU no son mediciones en tiempo real.',\n      'Los reportes NC no necesariamente corresponden a las imagenes analizadas.',\n      'Una clasificacion Correcta no constituye aprobacion definitiva.',\n      'Toda pieza defectuosa requiere revision humana.',\n      'Ninguna pieza puede aprobarse automaticamente.'\n    ],\n    requiere_validacion_humana: true,\n    aprobacion_automatica: false,\n    estado: 'PENDIENTE_VALIDACION_HUMANA'\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -783,7 +792,7 @@
         "responses": {
           "values": [
             {
-              "content": "=\nActúa como especialista en control de calidad industrial, inteligencia artificial aplicada y gestión de riesgos en procesos de fabricación de piezas metálicas.\n\nTu función es analizar conjuntamente los resultados de tres componentes de VisionGuard Industrial:\n\n1. ResNet18: clasificación visual de piezas metálicas.\n2. GRU: pronóstico de tasas de defectos por línea de producción.\n3. Transformer/NLP: análisis de reportes y recomendaciones industriales almacenadas.\n\nCONTEXTO DEL SISTEMA:\n\nVisionGuard Industrial es un prototipo académico de apoyo a decisiones industriales.\n\nLos resultados de ResNet18 corresponden a inferencias sobre imágenes de prueba.\n\nLos pronósticos GRU se basan en datos simulados, no en mediciones industriales reales.\n\nEl componente NLP clasifica en esta ejecución reportes de no conformidad SIMULADOS con un Transformer de embeddings (paraphrase-multilingual-MiniLM-L12-v2) y con reglas fijas. El campo nlp_transformer.transformer_ejecutado indica si la inferencia del Transformer se completó; si es false, solo existe la clasificación por reglas.\n\nEl sistema nunca debe sustituir la decisión de un inspector humano.\n\nDATOS RECIBIDOS:\n\n{{ JSON.stringify($json) }}\n\nOBJETIVO:\n\nGenerar un análisis industrial integrado, coherente, verificable y conservador que permita apoyar la inspección de calidad y la identificación de riesgos, sin autorizar acciones críticas automáticamente.\n\nREGLAS DE ANÁLISIS:\n\n1. Utiliza exclusivamente la información proporcionada en DATOS RECIBIDOS.\n\n2. Integra los resultados de ResNet18, GRU y NLP, diferenciando claramente las conclusiones de cada componente.\n\n3. No asumas que las imágenes analizadas, los registros NLP y las líneas de producción corresponden a la misma pieza, lote o evento.\n\n4. No inventes tipos de defectos, causas, observaciones visuales, mediciones, fechas ni valores numéricos.\n\n5. No afirmes haber observado directamente una imagen cuando solo recibiste la clasificación generada por ResNet18.\n\n6. Si ResNet18 clasifica una pieza como \"Defectuosa\":\n   - Asigna prioridad alta.\n   - Recomienda aislar o apartar la pieza.\n   - Exige inspección humana.\n   - Prohíbe la aprobación automática.\n\n7. Si ResNet18 clasifica una pieza como \"Correcta\":\n   - No la consideres aprobada definitivamente.\n   - Recomienda continuar con el protocolo de validación humana correspondiente.\n\n8. Si existe una inconsistencia entre la clasificación y el indicador de revisión humana recibido de la API, informa la inconsistencia y aplica el criterio de seguridad más conservador.\n\nREGLAS PARA EL MODELO GRU:\n\n9. Todos los pronósticos GRU son simulados y deben identificarse explícitamente como tales.\n\n10. No interpretes los pronósticos como mediciones reales ni como resultados en tiempo real.\n\n11. No afirmes tendencias crecientes, decrecientes, aceleraciones o deterioros temporales sin disponer de una serie histórica que permita demostrarlo.\n\n12. Comparar los pronósticos de L1, L2 y L3 permite identificar diferencias entre líneas, pero no demostrar una tendencia temporal.\n\n13. Puedes identificar la línea con mayor pronóstico, siempre que el dato esté disponible.\n\n14. No concluyas que una línea de producción tiene realmente más defectos solo porque presenta un pronóstico simulado superior.\n\n15. Diferencia claramente entre predicción, observación, hipótesis y recomendación.\n\nREGLAS PARA TRANSFORMER/NLP:\n\n16. Los registros NLP son antecedentes almacenados y no necesariamente corresponden a la imagen actual.\n\n17. Afirma que el Transformer se ejecutó solo si nlp_transformer.transformer_ejecutado es true. Reporta sus métricas de prueba frente a las reglas tal como vienen, sin exagerarlas, y la causa principal de los reportes de operación.\n\n18. Utiliza las recomendaciones NLP como información complementaria y no como diagnóstico confirmado de la pieza actual.\n\n19. No atribuyas defectos específicos a una pieza utilizando exclusivamente reportes NLP de otros casos.\n\nREGLAS DE ALERTAS Y VERIFICACIÓN:\n\n19b. Menciona explícitamente cada elemento de la lista \"alertas\" y su implicancia.\n\n19c. Todo número que escribas debe aparecer en DATOS RECIBIDOS: un control automático posterior compara cada cifra de tu respuesta con los datos y marca las no respaldadas.\n\nREGLAS DE SEGURIDAD INDUSTRIAL:\n\n20. Ninguna pieza puede aprobarse automáticamente.\n\n21. Ninguna detención de línea, descarte definitivo ni acción industrial crítica puede autorizarse sin intervención humana.\n\n22. Toda recomendación crítica debe indicar que requiere revisión y autorización de personal competente.\n\n23. Si la evidencia resulta insuficiente, informa la incertidumbre y recomienda inspección adicional.\n\n24. No modifiques las clasificaciones originales ni los valores numéricos entregados por los modelos.\n\n25. Mantén un enfoque preventivo, trazable y orientado a minimizar errores de decisión.\n\nREGLAS DE REDACCIÓN:\n\n26. Escribe exclusivamente en español.\n\n27. Utiliza lenguaje técnico, profesional, preciso y comprensible.\n\n28. Evita afirmaciones categóricas que no estén sustentadas por los datos.\n\n29. No exageres el rendimiento, la confiabilidad ni la aplicabilidad industrial de los modelos.\n\n30. Si se proporcionan porcentajes, conserva sus valores y unidades originales.\n\nFORMATO DE RESPUESTA:\n\nResponde únicamente con un objeto JSON válido, sin Markdown, sin explicaciones adicionales y sin bloques de código.\n\nUtiliza exactamente las siguientes claves:\n\n{\n  \"diagnostico\": \"Análisis integrado de los resultados disponibles, diferenciando los tres componentes.\",\n  \"recomendacion\": \"Acciones industriales sugeridas, indicando la necesidad de validación humana.\",\n  \"prioridad\": \"alta\",\n  \"justificacion\": \"Fundamentación técnica basada exclusivamente en los resultados recibidos.\",\n  \"resumen_imagenes\": \"Síntesis de la clasificación ResNet18, confianza y necesidad de inspección.\",\n  \"resumen_series_temporales\": \"Síntesis de los pronósticos GRU simulados, sin inventar tendencias temporales.\",\n  \"resumen_nlp\": \"Síntesis de los registros NLP almacenados y sus limitaciones.\",\n  \"riesgos_limitaciones\": \"Incertidumbres, restricciones académicas, inconsistencias y riesgos asociados.\",\n  \"requiere_revision_humana\": true,\n  \"aprobacion_automatica\": false,\n  \"origen\": \"PROTOTIPO_ACADEMICO_CON_DATOS_SIMULADOS\"\n}\n\nCONDICIONES OBLIGATORIAS DEL JSON:\n\n- \"prioridad\" debe contener exclusivamente \"alta\", \"media\" o \"baja\".\n- Si existe al menos una pieza clasificada como Defectuosa, la prioridad debe ser \"alta\".\n- \"requiere_revision_humana\" debe ser siempre true.\n- \"aprobacion_automatica\" debe ser siempre false.\n- \"origen\" debe conservar exactamente el valor establecido.\n- No agregues claves adicionales.\n- No devuelvas texto fuera del objeto JSON.\n- No inventes información cuando falten datos.\n- Nunca presentes resultados simulados como evidencia industrial real.\n"
+              "content": "=\nActúa como especialista en control de calidad industrial, inteligencia artificial aplicada y gestión de riesgos en procesos de fabricación de piezas metálicas.\n\nTu función es analizar conjuntamente los resultados de tres componentes de VisionGuard Industrial:\n\n1. ResNet18: clasificación visual de piezas metálicas.\n2. GRU: pronóstico de tasas de defectos por línea de producción.\n3. Transformer/NLP: análisis de reportes y recomendaciones industriales almacenadas.\n\nCONTEXTO DEL SISTEMA:\n\nVisionGuard Industrial es un prototipo académico de apoyo a decisiones industriales.\n\nLos resultados de ResNet18 corresponden a inferencias sobre imágenes de prueba.\n\nLos pronósticos GRU se basan en datos simulados, no en mediciones industriales reales.\n\nEl componente NLP clasifica en esta ejecución reportes de no conformidad SIMULADOS con un Transformer de embeddings (paraphrase-multilingual-MiniLM-L12-v2) y con reglas fijas. El campo nlp_transformer.transformer_ejecutado indica si la inferencia del Transformer se completó; si es false, solo existe la clasificación por reglas.\n\nEl sistema nunca debe sustituir la decisión de un inspector humano.\n\nDATOS RECIBIDOS:\n\n{{ JSON.stringify($json) }}\n\nOBJETIVO:\n\nGenerar un análisis industrial integrado, coherente, verificable y conservador que permita apoyar la inspección de calidad y la identificación de riesgos, sin autorizar acciones críticas automáticamente.\n\nREGLAS DE ANÁLISIS:\n\n1. Utiliza exclusivamente la información proporcionada en DATOS RECIBIDOS.\n\n2. Integra los resultados de ResNet18, GRU y NLP, diferenciando claramente las conclusiones de cada componente.\n\n3. No asumas que las imágenes analizadas, los registros NLP y las líneas de producción corresponden a la misma pieza, lote o evento.\n\n4. No inventes tipos de defectos, causas, observaciones visuales, mediciones, fechas ni valores numéricos.\n\n5. No afirmes haber observado directamente una imagen cuando solo recibiste la clasificación generada por ResNet18.\n\n6. Si ResNet18 clasifica una pieza como \"Defectuosa\":\n   - Asigna prioridad alta.\n   - Recomienda aislar o apartar la pieza.\n   - Exige inspección humana.\n   - Prohíbe la aprobación automática.\n\n7. Si ResNet18 clasifica una pieza como \"Correcta\":\n   - No la consideres aprobada definitivamente.\n   - Recomienda continuar con el protocolo de validación humana correspondiente.\n\n8. Si existe una inconsistencia entre la clasificación y el indicador de revisión humana recibido de la API, informa la inconsistencia y aplica el criterio de seguridad más conservador.\n\nREGLAS PARA EL MODELO GRU:\n\n9. Todos los pronósticos GRU son simulados y deben identificarse explícitamente como tales.\n\n10. No interpretes los pronósticos como mediciones reales ni como resultados en tiempo real.\n\n11. No afirmes tendencias crecientes, decrecientes, aceleraciones o deterioros temporales sin disponer de una serie histórica que permita demostrarlo.\n\n12. Comparar los pronósticos de L1, L2 y L3 permite identificar diferencias entre líneas, pero no demostrar una tendencia temporal.\n\n13. Puedes identificar la línea con mayor pronóstico, siempre que el dato esté disponible.\n\n14. No concluyas que una línea de producción tiene realmente más defectos solo porque presenta un pronóstico simulado superior.\n\n15. Diferencia claramente entre predicción, observación, hipótesis y recomendación.\n\nREGLAS PARA TRANSFORMER/NLP:\n\n16. Los registros NLP son antecedentes almacenados y no necesariamente corresponden a la imagen actual.\n\n17. Afirma que el Transformer se ejecutó solo si nlp_transformer.transformer_ejecutado es true. Reporta sus métricas de prueba frente a las reglas tal como vienen, sin exagerarlas, y la causa principal de los reportes de operación.\n\n18. Utiliza las recomendaciones NLP como información complementaria y no como diagnóstico confirmado de la pieza actual.\n\n19. No atribuyas defectos específicos a una pieza utilizando exclusivamente reportes NLP de otros casos.\n\nREGLAS DE ALERTAS Y VERIFICACIÓN:\n\n19b. Menciona explícitamente cada elemento de la lista \"alertas\" y su implicancia.\n\n19c. Todo número que escribas debe aparecer en DATOS RECIBIDOS: un control automático posterior compara cada cifra de tu respuesta con los datos y marca las no respaldadas.\n\n19d. CONTEXTO DOCUMENTAL (RAG): nlp_transformer.evidencia_documental contiene reportes de no conformidad recuperados por similitud. Cuando uses uno, cítalo con su identificador entre corchetes, por ejemplo [NC-093]. Solo puedes citar identificadores presentes en esa lista; un control automático rechaza citas inexistentes.\n\n19e. Si para un campo no hay evidencia suficiente en DATOS RECIBIDOS, escribe exactamente \"Sin información suficiente\" en ese campo en lugar de suponer.\n\nREGLAS DE SEGURIDAD INDUSTRIAL:\n\n20. Ninguna pieza puede aprobarse automáticamente.\n\n21. Ninguna detención de línea, descarte definitivo ni acción industrial crítica puede autorizarse sin intervención humana.\n\n22. Toda recomendación crítica debe indicar que requiere revisión y autorización de personal competente.\n\n23. Si la evidencia resulta insuficiente, informa la incertidumbre y recomienda inspección adicional.\n\n24. No modifiques las clasificaciones originales ni los valores numéricos entregados por los modelos.\n\n25. Mantén un enfoque preventivo, trazable y orientado a minimizar errores de decisión.\n\nREGLAS DE REDACCIÓN:\n\n26. Escribe exclusivamente en español.\n\n27. Utiliza lenguaje técnico, profesional, preciso y comprensible.\n\n28. Evita afirmaciones categóricas que no estén sustentadas por los datos.\n\n29. No exageres el rendimiento, la confiabilidad ni la aplicabilidad industrial de los modelos.\n\n30. Si se proporcionan porcentajes, conserva sus valores y unidades originales.\n\nFORMATO DE RESPUESTA:\n\nResponde únicamente con un objeto JSON válido, sin Markdown, sin explicaciones adicionales y sin bloques de código.\n\nUtiliza exactamente las siguientes claves:\n\n{\n  \"diagnostico\": \"Análisis integrado de los resultados disponibles, diferenciando los tres componentes.\",\n  \"recomendacion\": \"Acciones industriales sugeridas, indicando la necesidad de validación humana.\",\n  \"prioridad\": \"alta\",\n  \"justificacion\": \"Fundamentación técnica basada exclusivamente en los resultados recibidos.\",\n  \"resumen_imagenes\": \"Síntesis de la clasificación ResNet18, confianza y necesidad de inspección.\",\n  \"resumen_series_temporales\": \"Síntesis de los pronósticos GRU simulados, sin inventar tendencias temporales.\",\n  \"resumen_nlp\": \"Síntesis de los registros NLP almacenados y sus limitaciones.\",\n  \"riesgos_limitaciones\": \"Incertidumbres, restricciones académicas, inconsistencias y riesgos asociados.\",\n  \"requiere_revision_humana\": true,\n  \"aprobacion_automatica\": false,\n  \"origen\": \"PROTOTIPO_ACADEMICO_CON_DATOS_SIMULADOS\"\n}\n\nCONDICIONES OBLIGATORIAS DEL JSON:\n\n- \"prioridad\" debe contener exclusivamente \"alta\", \"media\" o \"baja\".\n- Si existe al menos una pieza clasificada como Defectuosa, la prioridad debe ser \"alta\".\n- \"requiere_revision_humana\" debe ser siempre true.\n- \"aprobacion_automatica\" debe ser siempre false.\n- \"origen\" debe conservar exactamente el valor establecido.\n- No agregues claves adicionales.\n- No devuelvas texto fuera del objeto JSON.\n- No inventes información cuando falten datos.\n- Nunca presentes resultados simulados como evidencia industrial real.\n"
             }
           ]
         },
@@ -840,7 +849,7 @@
     },
     {
       "parameters": {
-        "jsCode": "/*\n VISIONGUARD INDUSTRIAL v2.2 - VALIDACION FINAL DE SEGURIDAD (nodo Code JS)\n\n Capas de control sobre la salida de GPT-4o mini:\n  1. Parseo robusto del JSON (tolera ```json ... ```).\n  2. Estructura: 11 campos obligatorios y textos no vacios.\n  3. Reglas de seguridad deterministas: nunca aprobacion automatica, revision\n     humana siempre, prioridad alta si hay pieza defectuosa, origen academico.\n     Si el LLM las viola, se CORRIGEN al valor conservador y se registra.\n  4. Anti-alucinacion numerica: toda cifra del texto del LLM debe existir en\n     los datos de entrada (con tolerancia de redondeo y conversion a %).\n  5. Frases de aprobacion sospechosas (\"pieza aprobada\" sin negacion).\n Si el JSON es inutilizable (o el nodo LLM fallo tras 3 reintentos) se genera\n un ANALISIS DETERMINISTA DE RESPALDO: el flujo no se cae en silencio y el\n correo indica la fuente del analisis.\n*/\nconst ORIGEN = 'PROTOTIPO_ACADEMICO_CON_DATOS_SIMULADOS';\nconst CAMPOS = ['diagnostico', 'recomendacion', 'prioridad', 'justificacion', 'resumen_imagenes',\n  'resumen_series_temporales', 'resumen_nlp', 'riesgos_limitaciones', 'requiere_revision_humana',\n  'aprobacion_automatica', 'origen'];\nconst TEXTOS = ['diagnostico', 'recomendacion', 'justificacion', 'resumen_imagenes',\n  'resumen_series_temporales', 'resumen_nlp', 'riesgos_limitaciones'];\n\nconst integracion = $('Integracion_3_Modelos').first().json;\nconst imagenes = integracion.imagenes ?? [];\nif (imagenes.length === 0) throw new Error('No existen resultados ResNet18.');\nconst hayDefectuosa = imagenes.some(d => String(d.clasificacion ?? '').trim().toLowerCase() === 'defectuosa');\nconst gru = integracion.series_temporales ?? {};\nconst nlp = integracion.nlp_transformer ?? {};\n\nconst fallas = [];       // impiden usar la respuesta\nconst correcciones = []; // se corrigieron a valor seguro\n\n// ---------- 1. Extraer y parsear\nconst r = $input.first().json;\nif (r.error) fallas.push('Nodo LLM con error: ' + String(r.error.message ?? r.error).slice(0, 160));\nconst contenido = r.output?.[0]?.content?.find(c => c.type === 'output_text')?.text\n  ?? r.output?.[0]?.content?.[0]?.text ?? r.message?.content ?? r.text ?? null;\nlet a = null;\nif (contenido == null) fallas.push('El LLM no entrego contenido.');\nelse {\n  try {\n    a = typeof contenido === 'string'\n      ? JSON.parse(contenido.trim().replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, ''))\n      : contenido;\n    if (!a || typeof a !== 'object' || Array.isArray(a)) { fallas.push('La respuesta no es un objeto JSON.'); a = null; }\n  } catch (e) { fallas.push('JSON invalido del LLM.'); }\n}\n\n// ---------- 2. Estructura\nif (a) {\n  for (const c of CAMPOS) if (!(c in a)) fallas.push(`Falta el campo: ${c}`);\n  for (const c of TEXTOS) if (c in a && (typeof a[c] !== 'string' || !a[c].trim())) fallas.push(`Contenido invalido: ${c}`);\n}\n\n// ---------- 3. Reglas de seguridad (corregir, no confiar)\nif (a && fallas.length === 0) {\n  if (!['alta', 'media', 'baja'].includes(a.prioridad)) { correcciones.push(`prioridad '${a.prioridad}' -> alta`); a.prioridad = 'alta'; }\n  if (hayDefectuosa && a.prioridad !== 'alta') { correcciones.push('pieza defectuosa: prioridad -> alta'); a.prioridad = 'alta'; }\n  if (a.aprobacion_automatica !== false) { correcciones.push('aprobacion_automatica -> false'); a.aprobacion_automatica = false; }\n  if (a.requiere_revision_humana !== true) { correcciones.push('requiere_revision_humana -> true'); a.requiere_revision_humana = true; }\n  if (a.origen !== ORIGEN) { correcciones.push('origen corregido'); a.origen = ORIGEN; }\n  for (const k of Object.keys(a)) if (!CAMPOS.includes(k)) { delete a[k]; correcciones.push(`clave extra eliminada: ${k}`); }\n}\n\n// ---------- 4. Anti-alucinacion numerica\nconst permitidos = new Set();\nconst agregar = v => {\n  if (!Number.isFinite(v)) return;\n  [v, v * 100, v / 100].forEach(x => { permitidos.add(+x.toFixed(2)); permitidos.add(+x.toFixed(1)); permitidos.add(Math.round(x)); });\n};\n(function recorrer(o) {\n  if (o == null) return;\n  if (typeof o === 'number') agregar(o);\n  else if (typeof o === 'string') (o.match(/\\d+(?:[.,]\\d+)?/g) || []).forEach(s => agregar(parseFloat(s.replace(',', '.'))));\n  else if (typeof o === 'object') Object.values(o).forEach(recorrer);\n})(integracion);\nfor (let i = 0; i <= 12; i++) permitidos.add(i);   // conteos y ordinales pequenos (\"3 lineas\", \"L1\")\npermitidos.add(100);\n\nlet noRespaldados = [];\nlet frasesAprobacion = [];\nif (a && fallas.length === 0) {\n  const texto = TEXTOS.map(c => a[c]).join(' ');\n  noRespaldados = [...new Set((texto.match(/\\d+(?:[.,]\\d+)?/g) || []))]\n    .map(s => ({ s, v: parseFloat(s.replace(',', '.')) }))\n    .filter(({ v }) => ![...permitidos].some(p => Math.abs(p - v) <= 0.011))\n    .map(({ s }) => s);\n  frasesAprobacion = (texto.match(/.{0,30}\\baprobad[ao]s?\\b/gi) || [])\n    .filter(f => !/\\b(no|nunca|sin|ninguna|ningun)\\b|automatic|definitiv/i.test(f));\n  if (noRespaldados.length || frasesAprobacion.length) {\n    a.riesgos_limitaciones += ' [CONTROL AUTOMATICO: ' +\n      (noRespaldados.length ? `cifras sin respaldo en los datos: ${noRespaldados.join(', ')}. ` : '') +\n      (frasesAprobacion.length ? 'se detecto una frase de aprobacion sin negacion; NO hay aprobacion automatica. ' : '') +\n      'Verificar contra el panel antes de decidir.]';\n  }\n}\n\n// ---------- 5. Respaldo determinista\nconst pct = v => Number.isFinite(Number(v)) ? (Number(v) * 100).toFixed(2) + ' %' : 'n/d';\nfunction respaldo() {\n  const def = imagenes.filter(d => String(d.clasificacion).toLowerCase() === 'defectuosa');\n  return {\n    diagnostico: `Analisis de respaldo (sin LLM valido). ResNet18: ${imagenes.length} imagen(es), ${def.length} defectuosa(s): ` +\n      imagenes.map(d => `${d.archivo} ${d.clasificacion} (${pct(d.confianza)})`).join('; ') +\n      `. GRU simulado: mayor pronostico en ${gru.linea_mayor_pronostico} (${gru.mayor_pronostico_pct} %). ` +\n      `NLP: causa principal de NC ${nlp.causa_principal_operacion ?? 'sin datos'}.`,\n    recomendacion: def.length\n      ? 'Apartar las piezas defectuosas e inspeccionarlas manualmente. No aprobar automaticamente.'\n      : 'Continuar con la validacion humana segun protocolo. No aprobar automaticamente.',\n    prioridad: 'alta',\n    justificacion: 'Regla determinista aplicada porque la salida del LLM no supero la validacion: ' + fallas.join(' | '),\n    resumen_imagenes: imagenes.map(d => `${d.archivo}: ${d.clasificacion}, ${pct(d.confianza)}`).join('; '),\n    resumen_series_temporales: (gru.pronosticos ?? []).map(p => `${p.linea}: GRU ${p.gru_pct} %, promedio movil ${p.promedio_movil_pct} %`).join('; ') + ' (simulado).',\n    resumen_nlp: nlp.transformer_ejecutado ? `Transformer ejecutado; causa principal ${nlp.causa_principal_operacion}.` : 'Transformer no disponible; solo reglas.',\n    riesgos_limitaciones: 'Respuesta del LLM descartada por el control automatico; diagnostico generado por reglas fijas.',\n    requiere_revision_humana: true, aprobacion_automatica: false, origen: ORIGEN\n  };\n}\n\nconst usarRespaldo = !a || fallas.length > 0;\nconst analisis = usarRespaldo ? respaldo() : a;\nconst fuente = usarRespaldo ? 'RESPALDO_DETERMINISTA' : (correcciones.length ? 'LLM_CORREGIDO' : 'LLM_VALIDADO');\n\nreturn [{\n  json: {\n    sistema: 'VisionGuard Industrial',\n    tipo: 'ANALISIS_INTEGRADO_VALIDADO',\n    ...analisis,\n    estado: 'PENDIENTE_VALIDACION_HUMANA',\n    fuente_analisis: fuente,\n    controles_seguridad: {\n      json_valido: !usarRespaldo,\n      fallas_llm: fallas,\n      correcciones_aplicadas: correcciones,\n      cifras_no_respaldadas: noRespaldados,\n      frases_aprobacion_sospechosas: frasesAprobacion,\n      alucinacion_sospechada: noRespaldados.length > 0 || frasesAprobacion.length > 0,\n      revision_humana_obligatoria: true,\n      aprobacion_automatica_bloqueada: true,\n      validacion_humana_realizada: false\n    },\n    total_imagenes: integracion.resumen_integracion?.total_imagenes,\n    total_casos_nlp: integracion.resumen_integracion?.total_casos_nlp\n  }\n}];\n"
+        "jsCode": "/*\n VISIONGUARD INDUSTRIAL v2.2 - VALIDACION FINAL DE SEGURIDAD (nodo Code JS)\n\n Capas de control sobre la salida de GPT-4o mini:\n  1. Parseo robusto del JSON (tolera ```json ... ```).\n  2. Estructura: 11 campos obligatorios y textos no vacios.\n  3. Reglas de seguridad deterministas: nunca aprobacion automatica, revision\n     humana siempre, prioridad alta si hay pieza defectuosa, origen academico.\n     Si el LLM las viola, se CORRIGEN al valor conservador y se registra.\n  4. Anti-alucinacion numerica: toda cifra del texto del LLM debe existir en\n     los datos de entrada (con tolerancia de redondeo y conversion a %).\n  5. Frases de aprobacion sospechosas (\"pieza aprobada\" sin negacion).\n Si el JSON es inutilizable (o el nodo LLM fallo tras 3 reintentos) se genera\n un ANALISIS DETERMINISTA DE RESPALDO: el flujo no se cae en silencio y el\n correo indica la fuente del analisis.\n*/\nconst ORIGEN = 'PROTOTIPO_ACADEMICO_CON_DATOS_SIMULADOS';\nconst CAMPOS = ['diagnostico', 'recomendacion', 'prioridad', 'justificacion', 'resumen_imagenes',\n  'resumen_series_temporales', 'resumen_nlp', 'riesgos_limitaciones', 'requiere_revision_humana',\n  'aprobacion_automatica', 'origen'];\nconst TEXTOS = ['diagnostico', 'recomendacion', 'justificacion', 'resumen_imagenes',\n  'resumen_series_temporales', 'resumen_nlp', 'riesgos_limitaciones'];\n\nconst integracion = $('Integracion_3_Modelos').first().json;\nconst imagenes = integracion.imagenes ?? [];\nif (imagenes.length === 0) throw new Error('No existen resultados ResNet18.');\nconst hayDefectuosa = imagenes.some(d => String(d.clasificacion ?? '').trim().toLowerCase() === 'defectuosa');\nconst gru = integracion.series_temporales ?? {};\nconst nlp = integracion.nlp_transformer ?? {};\n\nconst fallas = [];       // impiden usar la respuesta\nconst correcciones = []; // se corrigieron a valor seguro\n\n// ---------- 1. Extraer y parsear\nconst r = $input.first().json;\nif (r.error) fallas.push('Nodo LLM con error: ' + String(r.error.message ?? r.error).slice(0, 160));\nconst contenido = r.output?.[0]?.content?.find(c => c.type === 'output_text')?.text\n  ?? r.output?.[0]?.content?.[0]?.text ?? r.message?.content ?? r.text ?? null;\nlet a = null;\nif (contenido == null) fallas.push('El LLM no entrego contenido.');\nelse {\n  try {\n    a = typeof contenido === 'string'\n      ? JSON.parse(contenido.trim().replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```$/, ''))\n      : contenido;\n    if (!a || typeof a !== 'object' || Array.isArray(a)) { fallas.push('La respuesta no es un objeto JSON.'); a = null; }\n  } catch (e) { fallas.push('JSON invalido del LLM.'); }\n}\n\n// ---------- 2. Estructura\nif (a) {\n  for (const c of CAMPOS) if (!(c in a)) fallas.push(`Falta el campo: ${c}`);\n  for (const c of TEXTOS) if (c in a && (typeof a[c] !== 'string' || !a[c].trim())) fallas.push(`Contenido invalido: ${c}`);\n}\n\n// ---------- 3. Reglas de seguridad (corregir, no confiar)\nif (a && fallas.length === 0) {\n  if (!['alta', 'media', 'baja'].includes(a.prioridad)) { correcciones.push(`prioridad '${a.prioridad}' -> alta`); a.prioridad = 'alta'; }\n  if (hayDefectuosa && a.prioridad !== 'alta') { correcciones.push('pieza defectuosa: prioridad -> alta'); a.prioridad = 'alta'; }\n  if (a.aprobacion_automatica !== false) { correcciones.push('aprobacion_automatica -> false'); a.aprobacion_automatica = false; }\n  if (a.requiere_revision_humana !== true) { correcciones.push('requiere_revision_humana -> true'); a.requiere_revision_humana = true; }\n  if (a.origen !== ORIGEN) { correcciones.push('origen corregido'); a.origen = ORIGEN; }\n  for (const k of Object.keys(a)) if (!CAMPOS.includes(k)) { delete a[k]; correcciones.push(`clave extra eliminada: ${k}`); }\n}\n\n// ---------- 4. Anti-alucinacion numerica\nconst permitidos = new Set();\nconst agregar = v => {\n  if (!Number.isFinite(v)) return;\n  [v, v * 100, v / 100].forEach(x => { permitidos.add(+x.toFixed(2)); permitidos.add(+x.toFixed(1)); permitidos.add(Math.round(x)); });\n};\n(function recorrer(o) {\n  if (o == null) return;\n  if (typeof o === 'number') agregar(o);\n  else if (typeof o === 'string') (o.match(/\\d+(?:[.,]\\d+)?/g) || []).forEach(s => agregar(parseFloat(s.replace(',', '.'))));\n  else if (typeof o === 'object') Object.values(o).forEach(recorrer);\n})(integracion);\nfor (let i = 0; i <= 12; i++) permitidos.add(i);   // conteos y ordinales pequenos (\"3 lineas\", \"L1\")\npermitidos.add(100);\n\nlet noRespaldados = [];\nlet frasesAprobacion = [];\nlet citasInexistentes = [];\nlet citasValidas = [];\nconst idsDisponibles = new Set((nlp.evidencia_documental || []).map(e => e.id_reporte));\nif (a && fallas.length === 0) {\n  const texto = TEXTOS.map(c => a[c]).join(' ');\n  noRespaldados = [...new Set((texto.match(/\\d+(?:[.,]\\d+)?/g) || []))]\n    .map(s => ({ s, v: parseFloat(s.replace(',', '.')) }))\n    .filter(({ v }) => ![...permitidos].some(p => Math.abs(p - v) <= 0.011))\n    .map(({ s }) => s);\n  frasesAprobacion = (texto.match(/.{0,30}\\baprobad[ao]s?\\b/gi) || [])\n    .filter(f => !/\\b(no|nunca|sin|ninguna|ningun)\\b|automatic|definitiv/i.test(f));\n  // Citas RAG: todo [NC-xxx] mencionado debe estar entre los documentos recuperados\n  const citas = [...new Set(texto.match(/NC-\\d{3}/g) || [])];\n  citasValidas = citas.filter(c => idsDisponibles.has(c));\n  citasInexistentes = citas.filter(c => !idsDisponibles.has(c));\n  if (noRespaldados.length || frasesAprobacion.length || citasInexistentes.length) {\n    a.riesgos_limitaciones += ' [CONTROL AUTOMATICO: ' +\n      (noRespaldados.length ? `cifras sin respaldo en los datos: ${noRespaldados.join(', ')}. ` : '') +\n      (citasInexistentes.length ? `citas a reportes no recuperados: ${citasInexistentes.join(', ')}. ` : '') +\n      (frasesAprobacion.length ? 'se detecto una frase de aprobacion sin negacion; NO hay aprobacion automatica. ' : '') +\n      'Verificar contra el panel antes de decidir.]';\n  }\n}\n\n// ---------- 5. Respaldo determinista\nconst pct = v => Number.isFinite(Number(v)) ? (Number(v) * 100).toFixed(2) + ' %' : 'n/d';\nfunction respaldo() {\n  const def = imagenes.filter(d => String(d.clasificacion).toLowerCase() === 'defectuosa');\n  return {\n    diagnostico: `Analisis de respaldo (sin LLM valido). ResNet18: ${imagenes.length} imagen(es), ${def.length} defectuosa(s): ` +\n      imagenes.map(d => `${d.archivo} ${d.clasificacion} (${pct(d.confianza)})`).join('; ') +\n      `. GRU simulado: mayor pronostico en ${gru.linea_mayor_pronostico} (${gru.mayor_pronostico_pct} %). ` +\n      `NLP: causa principal de NC ${nlp.causa_principal_operacion ?? 'sin datos'}.`,\n    recomendacion: def.length\n      ? 'Apartar las piezas defectuosas e inspeccionarlas manualmente. No aprobar automaticamente.'\n      : 'Continuar con la validacion humana segun protocolo. No aprobar automaticamente.',\n    prioridad: 'alta',\n    justificacion: 'Regla determinista aplicada porque la salida del LLM no supero la validacion: ' + fallas.join(' | '),\n    resumen_imagenes: imagenes.map(d => `${d.archivo}: ${d.clasificacion}, ${pct(d.confianza)}`).join('; '),\n    resumen_series_temporales: (gru.pronosticos ?? []).map(p => `${p.linea}: GRU ${p.gru_pct} %, promedio movil ${p.promedio_movil_pct} %`).join('; ') + ' (simulado).',\n    resumen_nlp: nlp.transformer_ejecutado ? `Transformer ejecutado; causa principal ${nlp.causa_principal_operacion}.` : 'Transformer no disponible; solo reglas.',\n    riesgos_limitaciones: 'Respuesta del LLM descartada por el control automatico; diagnostico generado por reglas fijas.',\n    requiere_revision_humana: true, aprobacion_automatica: false, origen: ORIGEN\n  };\n}\n\nconst usarRespaldo = !a || fallas.length > 0;\nconst analisis = usarRespaldo ? respaldo() : a;\nconst fuente = usarRespaldo ? 'RESPALDO_DETERMINISTA' : (correcciones.length ? 'LLM_CORREGIDO' : 'LLM_VALIDADO');\n\nreturn [{\n  json: {\n    sistema: 'VisionGuard Industrial',\n    tipo: 'ANALISIS_INTEGRADO_VALIDADO',\n    ...analisis,\n    estado: 'PENDIENTE_VALIDACION_HUMANA',\n    fuente_analisis: fuente,\n    controles_seguridad: {\n      json_valido: !usarRespaldo,\n      fallas_llm: fallas,\n      correcciones_aplicadas: correcciones,\n      cifras_no_respaldadas: noRespaldados,\n      frases_aprobacion_sospechosas: frasesAprobacion,\n      citas_validas: citasValidas,\n      citas_inexistentes: citasInexistentes,\n      documentos_recuperados: [...idsDisponibles],\n      alucinacion_sospechada: noRespaldados.length > 0 || frasesAprobacion.length > 0 || citasInexistentes.length > 0,\n      revision_humana_obligatoria: true,\n      aprobacion_automatica_bloqueada: true,\n      validacion_humana_realizada: false\n    },\n    total_imagenes: integracion.resumen_integracion?.total_imagenes,\n    total_casos_nlp: integracion.resumen_integracion?.total_casos_nlp\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1109,9 +1118,10 @@
     {
       "parameters": {
         "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
-        "text": "={{ (() => { const pct = v => Number.isFinite(Number(v)) ? (Number(v) * 100).toFixed(2) + ' %' : 'n/d'; const c = $('Config').first().json; const d = $json; const corto = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; }; return `🛡️ VISIONGUARD · INSPECCIÓN ${d.tiene_alertas ? '🚨' : ''}\n📁 ${d.archivo}\n🔍 ResNet18: ${d.clasificacion} (${pct(d.confianza)})\n🚦 Prioridad: ${String(d.prioridad).toUpperCase()}\n📈 GRU simulado: ${d.linea_mayor_pronostico} → ${d.pronostico_max_pct} %\n📝 NLP: causa principal ${d.nlp_causa_principal}${d.nlp_transformer_ejecutado ? '' : ' (solo reglas)'}\n${d.tiene_alertas ? '⚠️ ' + corto(d.alertas, 300) + '\\n' : ''}\n🤖 ${corto(d.diagnostico, 600)}\n\n✅ ${corto(d.recomendacion, 400)}\n\n👤 Revisión humana obligatoria. Responda el correo de aprobación.\n📊 Panel: ${c.dashboard_url}`; })() }}",
+        "text": "={{ (() => { const pct = v => Number.isFinite(Number(v)) ? (Number(v) * 100).toFixed(2) + ' %' : 'n/d'; const h = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');  const c = $('Config').first().json; const d = $json; const corto = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; }; return h(`🛡️ VISIONGUARD · INSPECCIÓN ${d.tiene_alertas ? '🚨' : ''}\n📁 ${d.archivo}\n🔍 ResNet18: ${d.clasificacion} (${pct(d.confianza)})\n🚦 Prioridad: ${String(d.prioridad).toUpperCase()}\n📈 GRU simulado: ${d.linea_mayor_pronostico} → ${d.pronostico_max_pct} %\n📝 NLP: causa principal ${d.nlp_causa_principal}${d.nlp_transformer_ejecutado ? '' : ' (solo reglas)'}\n${d.tiene_alertas ? '⚠️ ' + corto(d.alertas, 300) + '\\n' : ''}\n🤖 ${corto(d.diagnostico, 600)}\n\n✅ ${corto(d.recomendacion, 400)}\n\n👤 Revisión humana obligatoria. Responda el correo de aprobación.\n📊 Panel: ${c.dashboard_url}`); })() }}",
         "additionalFields": {
-          "appendAttribution": false
+          "appendAttribution": false,
+          "parse_mode": "HTML"
         }
       },
       "type": "n8n-nodes-base.telegram",
@@ -1198,37 +1208,37 @@
         "assignments": {
           "assignments": [
             {
-              "id": "657d65c9-f2f3-4f66-8000-f97cd03347ec",
+              "id": "21d1a079-1e7f-45e6-ace8-b191bd0faa59",
               "name": "clave_unica",
               "value": "={{ $('Loop_Inspecciones').first().json.clave_unica }}",
               "type": "string"
             },
             {
-              "id": "9a2c8232-f615-4c5f-b09b-47d8452ef0ed",
+              "id": "4cd2c606-2d39-4c19-a0c2-225b316a5c45",
               "name": "archivo",
               "value": "={{ $('Loop_Inspecciones').first().json.archivo }}",
               "type": "string"
             },
             {
-              "id": "a763ecf7-be8b-44e9-b0e9-98d382f3705f",
+              "id": "8cf633c9-0710-4256-9dc1-e83f63e1114e",
               "name": "validacion_humana_realizada",
               "value": true,
               "type": "boolean"
             },
             {
-              "id": "a14c91c5-e8bf-4b9d-9311-030f52bd3440",
+              "id": "e655d701-dc08-4ee6-b4cb-54a94b39949a",
               "name": "estado",
               "value": "ACCION_AUTORIZADA_POR_HUMANO",
               "type": "string"
             },
             {
-              "id": "f471bcea-dfe2-45e3-8d22-1dc830e14cc1",
+              "id": "c3e3d260-bdd6-4a9d-b529-5d12f5dcfc26",
               "name": "decision_humana",
               "value": "APROBAR",
               "type": "string"
             },
             {
-              "id": "f2a8cfd1-d9c9-42f1-bdab-4a3dfc2ade6f",
+              "id": "a47c6d56-26be-4171-b006-694febd3dc62",
               "name": "fecha_decision_humana",
               "value": "={{ $now.setZone('America/Santiago').toFormat('yyyy-MM-dd HH:mm:ss') }}",
               "type": "string"
@@ -1251,37 +1261,37 @@
         "assignments": {
           "assignments": [
             {
-              "id": "69dfe612-b216-403c-b322-57c7f86a170a",
+              "id": "b9e6181c-5cd0-42a1-a38a-44ae93695bab",
               "name": "clave_unica",
               "value": "={{ $('Loop_Inspecciones').first().json.clave_unica }}",
               "type": "string"
             },
             {
-              "id": "a06b5a41-a017-44b5-bde3-24487544a23e",
+              "id": "2ec97251-7adb-430b-8549-75019c34d9bc",
               "name": "archivo",
               "value": "={{ $('Loop_Inspecciones').first().json.archivo }}",
               "type": "string"
             },
             {
-              "id": "2eca5318-7c24-4d4d-8dec-ed3ad95dc716",
+              "id": "a4d680b6-dfef-4ceb-be78-db270266b6c7",
               "name": "validacion_humana_realizada",
               "value": "={{ $json.data?.approved === false }}",
               "type": "boolean"
             },
             {
-              "id": "c8631789-6084-4895-836e-1077ddc16dc7",
+              "id": "c6709492-50b7-451a-989f-edb68070fb54",
               "name": "estado",
               "value": "={{ $json.data?.approved === false ? 'ACCION_RECHAZADA_POR_HUMANO' : 'SIN_RESPUESTA_HUMANA_ESCALAR' }}",
               "type": "string"
             },
             {
-              "id": "dfff89f3-5e41-4343-b2ef-732cbe5ce4b2",
+              "id": "09499537-4543-4782-91c3-aa60d61551c7",
               "name": "decision_humana",
               "value": "={{ $json.data?.approved === false ? 'RECHAZAR' : 'SIN_RESPUESTA' }}",
               "type": "string"
             },
             {
-              "id": "6257aed9-850e-4b50-9f5b-beca2618f45f",
+              "id": "63c1c93f-f7d0-44c0-b549-10fbbb961eb9",
               "name": "fecha_decision_humana",
               "value": "={{ $now.setZone('America/Santiago').toFormat('yyyy-MM-dd HH:mm:ss') }}",
               "type": "string"
@@ -1559,49 +1569,49 @@
         "assignments": {
           "assignments": [
             {
-              "id": "d3e266cd-36a0-4870-a28f-f15e1370a47c",
+              "id": "80029347-83d8-4a78-ad80-66f3a718cd1c",
               "name": "dashboard_url",
               "value": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit#gid=0",
               "type": "string"
             },
             {
-              "id": "cf97d673-c4f2-4769-99bf-36e1c0a7c7f6",
+              "id": "1de35346-f6e2-4ad9-973f-a28be77046cf",
               "name": "historial_url",
               "value": "https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit",
               "type": "string"
             },
             {
-              "id": "9e178f50-9d80-47b2-ad6e-ba4e649bdb8e",
+              "id": "9affea5e-1ec3-499b-a819-ee79874dcc91",
               "name": "email_responsable",
               "value": "responsable.calidad@ejemplo.com",
               "type": "string"
             },
             {
-              "id": "919bf290-4283-4d88-ad30-3606a5eb3a41",
+              "id": "9405858c-b8d2-4b56-b90f-4c25babc3a46",
               "name": "telegram_chat_id",
               "value": "TU_TELEGRAM_CHAT_ID",
               "type": "string"
             },
             {
-              "id": "8e376ae6-a365-4eb8-9619-30eda2448679",
+              "id": "c8dda792-879c-456e-8c7a-c998d1033ea9",
               "name": "umbral_confianza",
               "value": 0.9,
               "type": "number"
             },
             {
-              "id": "faff6232-a917-47e4-84fd-e9e5bf9db55e",
+              "id": "f18d4e8e-b1de-4eb4-b88e-e9f3c317adc4",
               "name": "umbral_pronostico_pct",
               "value": 7.5,
               "type": "number"
             },
             {
-              "id": "cc8aa20a-6a84-4035-9333-06b102d03a3c",
+              "id": "0f0b8623-020f-4f9e-9d37-af2f2b6008c2",
               "name": "umbral_discrepancia_pp",
               "value": 1.5,
               "type": "number"
             },
             {
-              "id": "e0266a01-b337-494b-a3dd-f503182c6467",
+              "id": "cf8f0c0f-fe2d-4129-b478-a72276b05a80",
               "name": "version",
               "value": "VisionGuard v2.2 - Hito 2",
               "type": "string"
@@ -1616,7 +1626,7 @@
         -416,
         400
       ],
-      "id": "807594f4-1ebb-4ffe-aa47-550727f3e7ff",
+      "id": "73ec495f-6960-45f2-b6c7-96f00919a02a",
       "name": "Config"
     },
     {
@@ -1624,7 +1634,8 @@
         "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
         "text": "={{ '🚨 VISIONGUARD | API ResNet18 NO DISPONIBLE\\nDos verificaciones /health fallaron (60 s de espera).\\nNo se procesaron inspecciones en este turno.\\nPanel: ' + $('Config').first().json.dashboard_url }}",
         "additionalFields": {
-          "appendAttribution": false
+          "appendAttribution": false,
+          "parse_mode": "HTML"
         }
       },
       "type": "n8n-nodes-base.telegram",
@@ -1633,7 +1644,7 @@
         1088,
         336
       ],
-      "id": "134752bb-973d-4d21-a047-c9ff08d180c6",
+      "id": "4ef372d5-9a20-4e5f-8812-0efb03bd0af3",
       "name": "Telegram_API_Caida",
       "retryOnFail": true,
       "onError": "continueRegularOutput"
@@ -1649,7 +1660,7 @@
           },
           "conditions": [
             {
-              "id": "dad79f25-4cb5-4436-ad63-0926742d92c1",
+              "id": "d1905f91-fa64-4840-9dfa-82666bd98cd0",
               "leftValue": "={{ !!$json.id }}",
               "rightValue": "",
               "operator": {
@@ -1669,7 +1680,7 @@
         1232,
         0
       ],
-      "id": "b13e99b1-f9b2-4aec-a25a-bfa38b4766b2",
+      "id": "988d5381-fad9-4c4a-b4d3-bee2e7d90a63",
       "name": "Hay_Imagenes_Pendientes"
     },
     {
@@ -1687,7 +1698,7 @@
         1440,
         112
       ],
-      "id": "77db6240-2d6a-45ef-86f9-bf60de02787d",
+      "id": "3723d93b-a406-4a30-b870-8abfadfde99f",
       "name": "Aviso_Sin_Pendientes_Gmail",
       "retryOnFail": true,
       "onError": "continueRegularOutput"
@@ -1697,7 +1708,8 @@
         "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
         "text": "={{ 'ℹ️ VISIONGUARD | Sin imagenes pendientes en este turno.\\nPanel: ' + $('Config').first().json.dashboard_url }}",
         "additionalFields": {
-          "appendAttribution": false
+          "appendAttribution": false,
+          "parse_mode": "HTML"
         }
       },
       "type": "n8n-nodes-base.telegram",
@@ -1706,7 +1718,7 @@
         1440,
         256
       ],
-      "id": "49f950ae-4d9d-4f1f-9e1d-53a87a593363",
+      "id": "a964d68c-825c-40ac-b3a9-26af5a0c952d",
       "name": "Aviso_Sin_Pendientes_Telegram",
       "retryOnFail": true,
       "onError": "continueRegularOutput"
@@ -1733,7 +1745,7 @@
         -64,
         1056
       ],
-      "id": "511e87b2-6b55-4842-ad48-09305949aeb5",
+      "id": "248b0593-8715-4999-9be5-42cabca7ed06",
       "name": "Leer_Reportes_NC",
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
@@ -1748,7 +1760,7 @@
         144,
         1056
       ],
-      "id": "1210b8e4-6c6e-4f8b-a863-917e54c817e3",
+      "id": "96aee8c4-640b-4411-8848-375ce385ec4d",
       "name": "Preparar_Textos_NLP"
     },
     {
@@ -1776,7 +1788,7 @@
         352,
         1152
       ],
-      "id": "141c608d-2a9c-48ed-97e0-d1b04b7a3777",
+      "id": "7e533189-c17e-41e0-b0eb-93f8b0b47794",
       "name": "Embeddings_Transformer_HF",
       "retryOnFail": true,
       "maxTries": 3,
@@ -1797,12 +1809,12 @@
         560,
         1056
       ],
-      "id": "d6dc8ad0-1086-4597-b3cf-302ae891315f",
+      "id": "245926fb-2a30-40c3-938e-2b33eef6a0fc",
       "name": "Unir_Textos_Embeddings"
     },
     {
       "parameters": {
-        "jsCode": "/*\n VISIONGUARD v2.2 - PARSEAR EMBEDDINGS  (nodo Code JS)\n Une la respuesta de Hugging Face (texto JSON) con los reportes y valida:\n   - que sea una lista con un vector por reporte,\n   - que todos los vectores tengan la misma dimension y sean numericos.\n Si algo falla, NO detiene el flujo: deja embeddings = null y el motivo,\n para que el nodo Python use solo las reglas y lo informe.\n*/\nconst d = $input.first().json;\nlet embeddings = null;\nlet motivo = '';\n\ntry {\n  if (d.error) throw new Error('HTTP: ' + String(d.error.message ?? d.error).slice(0, 160));\n  if (d.respuesta_hf == null) throw new Error('Sin respuesta de Hugging Face');\n  const v = typeof d.respuesta_hf === 'string' ? JSON.parse(d.respuesta_hf) : d.respuesta_hf;\n  if (!Array.isArray(v) || v.length !== (d.reportes || []).length) {\n    throw new Error(`Se esperaban ${(d.reportes || []).length} vectores y llegaron ${Array.isArray(v) ? v.length : 0}`);\n  }\n  const dim = v[0]?.length;\n  if (!dim || !v.every(x => Array.isArray(x) && x.length === dim && x.every(Number.isFinite))) {\n    throw new Error('Vectores con dimension o valores invalidos');\n  }\n  embeddings = v;\n} catch (e) {\n  motivo = e.message;\n}\n\nreturn [{\n  json: {\n    reportes: d.reportes || [],\n    descartados: d.descartados || [],\n    embeddings,\n    dimension: embeddings ? embeddings[0].length : 0,\n    motivo_sin_transformer: motivo\n  }\n}];\n"
+        "jsCode": "/*\n VISIONGUARD v2.2 - PARSEAR EMBEDDINGS  (nodo Code JS)\n Fuentes de embeddings del Transformer MiniLM, en orden de preferencia:\n   1. HF_EN_VIVO: respuesta de Hugging Face (Embeddings_Transformer_HF).\n   2. INDICE_PRECALCULADO: indice batch generado con el MISMO modelo\n      (python/nlp/indexar_embeddings.py) y descargado desde GitHub por\n      Indice_Embeddings_GitHub. Cada vector se usa solo si el hash del texto\n      coincide (integridad: el reporte no cambio desde la indexacion).\n Validaciones: un vector por reporte, misma dimension y valores numericos.\n Si nada sirve: embeddings = null y motivo, y el nodo Python usa solo reglas.\n*/\nconst d = $('Unir_Textos_Embeddings').first().json;\n// raw.githubusercontent.com responde text/plain: n8n deja el cuerpo como texto en `data`\n// (verificado en la ejecucion 110). Se parsea aqui.\nlet idx = $input.first().json;\nif (!idx.vectores && typeof idx.data === 'string') {\n  try { idx = JSON.parse(idx.data); } catch (e) { idx = { error: { message: 'indice no es JSON valido' } }; }\n}\nconst reportes = d.reportes || [];\n\n// djb2 de 32 bits sin signo (identico a indexar_embeddings.py)\nfunction djb2(t) {\n  let h = 5381;\n  for (const ch of t) h = (Math.imul(h, 33) ^ ch.charCodeAt(0)) >>> 0;\n  return h;\n}\nfunction validos(v, n) {\n  if (!Array.isArray(v) || v.length !== n || n === 0) return false;\n  const dim = v[0]?.length;\n  return !!dim && v.every(x => Array.isArray(x) && x.length === dim && x.every(Number.isFinite));\n}\n\nlet embeddings = null, origen = 'NINGUNO';\nconst motivos = [];\n\n// 1. Hugging Face en vivo\ntry {\n  if (d.error) throw new Error('HF: ' + String(d.error.message ?? d.error).slice(0, 120));\n  if (d.respuesta_hf == null) throw new Error('HF: sin respuesta');\n  const v = typeof d.respuesta_hf === 'string' ? JSON.parse(d.respuesta_hf) : d.respuesta_hf;\n  if (!validos(v, reportes.length)) throw new Error('HF: vectores invalidos o incompletos');\n  embeddings = v; origen = 'HF_EN_VIVO';\n} catch (e) { motivos.push(e.message); }\n\n// 2. Indice precalculado (GitHub)\nif (!embeddings) {\n  try {\n    if (idx.error) throw new Error('Indice: ' + String(idx.error.message ?? idx.error).slice(0, 120));\n    const tabla = idx.vectores || {};\n    const v = reportes.map(r => {\n      const e = tabla[r.id_reporte];\n      return e && e.hash === djb2(r.texto) ? e.v : null;\n    });\n    const faltan = v.filter(x => !x).length;\n    if (faltan) throw new Error(`Indice: ${faltan} reporte(s) sin vector o con texto modificado`);\n    if (!validos(v, reportes.length)) throw new Error('Indice: vectores invalidos');\n    embeddings = v; origen = 'INDICE_PRECALCULADO';\n  } catch (e) { motivos.push(e.message); }\n}\n\nreturn [{\n  json: {\n    reportes,\n    descartados: d.descartados || [],\n    embeddings,\n    dimension: embeddings ? embeddings[0].length : 0,\n    origen_embeddings: origen,\n    modelo_indice: idx.modelo || null,\n    motivo_sin_transformer: embeddings ? '' : motivos.join(' | ')\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1810,13 +1822,13 @@
         752,
         1056
       ],
-      "id": "791dc267-a650-4831-a173-d1372dd94647",
+      "id": "9c024dc7-fb69-4336-bf41-e1b10d95b005",
       "name": "Parsear_Embeddings"
     },
     {
       "parameters": {
         "language": "pythonNative",
-        "pythonCode": "# VISIONGUARD v2.2 - CLASIFICACION NLP DE REPORTES DE NO CONFORMIDAD (nodo Code Python)\n#\n# Transformer: embeddings de paraphrase-multilingual-MiniLM-L12-v2 (calculados\n# en Hugging Face). Clasificador por CENTROIDE: promedio normalizado de los\n# reportes 'referencia' de cada causa; cada reporte va a la causa con mayor\n# similitud coseno.\n# Alternativa simple: reglas fijas de palabras clave (identicas a\n# python/nlp/nlp_comun.py).\n# Metricas: accuracy y F1 macro de AMBOS metodos sobre los reportes 'prueba'\n# (no usados para construir los centroides).\n#\n# Sin imports: el runner Python nativo de n8n restringe la biblioteca estandar.\n\nCLASES = [\"materia_prima\", \"ajuste_proceso\", \"herramienta_molde\",\n          \"operacion_manual\", \"medicion_inspeccion\"]\nREGLAS = {\n    \"materia_prima\": [\"porosidad\", \"poro\", \"inclusion\", \"aleacion\", \"colada\", \"lote de material\", \"impureza\"],\n    \"ajuste_proceso\": [\"temperatura\", \"presion\", \"parametro\", \"tiempo de ciclo\", \"velocidad\", \"enfriamiento\"],\n    \"herramienta_molde\": [\"molde\", \"matriz\", \"desgaste\", \"desgastad\", \"herramienta\", \"cavidad\"],\n    \"operacion_manual\": [\"operador\", \"golpe\", \"manipulacion\", \"caida\", \"procedimiento\", \"turno\"],\n    \"medicion_inspeccion\": [\"calibr\", \"medicion\", \"instrumento\", \"pie de metro\", \"micrometro\", \"galga\"],\n}\nSIN = \"sin_clasificar\"\nTILDES = str.maketrans(\"áéíóúüñÁÉÍÓÚÜÑ\", \"aeiouunaeiouun\")\n\n\ndef leer_entrada():\n    \"\"\"Runner Python nativo de n8n: `_items` es una lista de dicts {\"json\": {...}}.\n    Ojo: el sandbox restringe builtins (p. ej. `hasattr` no existe; verificado\n    en la ejecucion 100 de n8n), por eso no se usan hasattr/isinstance.\"\"\"\n    return _items[0][\"json\"]  # noqa: F821  (variable inyectada por n8n)\n\n\ndef por_reglas(texto):\n    t = str(texto).lower().translate(TILDES)\n    puntos = {c: sum(1 for k in REGLAS[c] if k in t) for c in CLASES}\n    mejor = max(CLASES, key=lambda c: puntos[c])\n    return mejor if puntos[mejor] > 0 else SIN\n\n\ndef unitario(v):\n    n = sum(x * x for x in v) ** 0.5\n    return [x / n for x in v] if n > 0 else v\n\n\ndef metricas(reales, pred):\n    n = len(reales)\n    if n == 0:\n        return {\"n\": 0, \"accuracy\": None, \"f1_macro\": None}\n    acc = sum(1 for r, p in zip(reales, pred) if r == p) / n\n    f1s = []\n    for c in CLASES:\n        tp = sum(1 for r, p in zip(reales, pred) if r == c and p == c)\n        fp = sum(1 for r, p in zip(reales, pred) if r != c and p == c)\n        fn = sum(1 for r, p in zip(reales, pred) if r == c and p != c)\n        pr = tp / (tp + fp) if tp + fp else 0.0\n        rc = tp / (tp + fn) if tp + fn else 0.0\n        f1s.append(2 * pr * rc / (pr + rc) if pr + rc else 0.0)\n    return {\"n\": n, \"accuracy\": round(acc, 4), \"f1_macro\": round(sum(f1s) / len(f1s), 4)}\n\n\nd = leer_entrada()\nreportes = d.get(\"reportes\") or []\nemb = d.get(\"embeddings\")\nusar_tf = bool(emb) and len(emb) == len(reportes)\nmotivo = d.get(\"motivo_sin_transformer\") or (\"\" if usar_tf else \"Sin embeddings\")\n\n# 1. Reglas para todos los reportes\nfor r in reportes:\n    r[\"causa_reglas\"] = por_reglas(r.get(\"texto\", \"\"))\n\n# 2. Transformer: centroides con los reportes de referencia\nif usar_tf:\n    vect = [unitario(v) for v in emb]\n    centroides = {}\n    for c in CLASES:\n        grupo = [vect[i] for i, r in enumerate(reportes) if r[\"rol\"] == \"referencia\" and r[\"causa_real\"] == c]\n        if grupo:\n            centroides[c] = unitario([sum(col) / len(grupo) for col in zip(*grupo)])\n    if len(centroides) < 2:\n        usar_tf, motivo = False, \"Menos de 2 causas con reportes de referencia\"\n    else:\n        for i, r in enumerate(reportes):\n            sims = {c: sum(a * b for a, b in zip(vect[i], cv)) for c, cv in centroides.items()}\n            mejor = max(sims, key=sims.get)\n            r[\"causa_transformer\"] = mejor\n            r[\"similitud\"] = round(sims[mejor], 4)\n\n# 3. Metricas en el conjunto de prueba (mismos datos para ambos metodos)\nprueba = [r for r in reportes if r[\"rol\"] == \"prueba\" and r[\"causa_real\"] in CLASES]\nreales = [r[\"causa_real\"] for r in prueba]\nm_reglas = metricas(reales, [r[\"causa_reglas\"] for r in prueba])\nm_tf = metricas(reales, [r.get(\"causa_transformer\", SIN) for r in prueba]) if usar_tf else None\nif m_tf and m_tf[\"accuracy\"] is not None and m_reglas[\"accuracy\"] is not None:\n    ganador = (\"Transformer\" if m_tf[\"f1_macro\"] > m_reglas[\"f1_macro\"]\n               else \"Reglas\" if m_tf[\"f1_macro\"] < m_reglas[\"f1_macro\"] else \"Empate\")\nelse:\n    ganador = \"No evaluable\"\n\n# 4. Reportes de operacion (los \"nuevos\" del turno)\noper = [r for r in reportes if r[\"rol\"] == \"operacion\"]\n# Navaja de Occam: para los reportes nuevos se usa el metodo con MEJOR F1 en\n# prueba en esta misma corrida (en la evaluacion offline ganaron las reglas).\nclave = \"causa_transformer\" if usar_tf and ganador == \"Transformer\" else \"causa_reglas\"\ndist = {}\nfor r in oper:\n    dist[r[clave]] = dist.get(r[clave], 0) + 1\nprincipal = max(dist, key=dist.get) if dist else \"sin_datos\"\nconcord = (round(100 * sum(1 for r in oper if r.get(\"causa_transformer\") == r[\"causa_reglas\"]) / len(oper), 1)\n           if usar_tf and oper else None)\ncasos = sorted(oper, key=lambda r: r.get(\"fecha\", \"\"), reverse=True)[:8]\n\nreturn [{\"json\": {\n    \"tipo\": \"NLP_TRANSFORMER\",\n    \"modulo\": \"Transformer_NLP_Clasificacion\",\n    \"transformer_ejecutado\": usar_tf,\n    \"modelo\": \"sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2\" if usar_tf else \"reglas_palabras_clave\",\n    \"metodo\": \"centroide_coseno_sobre_embeddings\" if usar_tf else \"reglas_palabras_clave\",\n    \"motivo_sin_transformer\": \"\" if usar_tf else motivo,\n    \"n_referencia\": sum(1 for r in reportes if r[\"rol\"] == \"referencia\"),\n    \"n_prueba\": len(prueba),\n    \"n_operacion\": len(oper),\n    \"metricas_prueba\": {\"transformer\": m_tf, \"reglas\": m_reglas},\n    \"mejor_metodo_en_prueba_f1\": ganador,\n    \"metodo_usado_operacion\": \"Transformer\" if clave == \"causa_transformer\" else \"Reglas\",\n    \"distribucion_causas_operacion\": dist,\n    \"causa_principal_operacion\": principal,\n    \"concordancia_transformer_reglas_pct\": concord,\n    \"casos_operacion\": [{\"id_reporte\": r[\"id_reporte\"], \"fecha\": r.get(\"fecha\", \"\"),\n                         \"causa_transformer\": r.get(\"causa_transformer\"), \"similitud\": r.get(\"similitud\"),\n                         \"causa_reglas\": r[\"causa_reglas\"]} for r in casos],\n    \"descartados_validacion\": d.get(\"descartados\") or [],\n    \"origen\": \"SIMULADO_ACADEMICO_NO_REAL\",\n}}]\n"
+        "pythonCode": "# VISIONGUARD v2.2 - CLASIFICACION NLP DE REPORTES DE NO CONFORMIDAD (nodo Code Python)\n#\n# Transformer: embeddings de paraphrase-multilingual-MiniLM-L12-v2 (calculados\n# en Hugging Face). Clasificador por CENTROIDE: promedio normalizado de los\n# reportes 'referencia' de cada causa; cada reporte va a la causa con mayor\n# similitud coseno.\n# Alternativa simple: reglas fijas de palabras clave (identicas a\n# python/nlp/nlp_comun.py).\n# Metricas: accuracy y F1 macro de AMBOS metodos sobre los reportes 'prueba'\n# (no usados para construir los centroides).\n#\n# Sin imports: el runner Python nativo de n8n restringe la biblioteca estandar.\n\nCLASES = [\"materia_prima\", \"ajuste_proceso\", \"herramienta_molde\",\n          \"operacion_manual\", \"medicion_inspeccion\"]\nREGLAS = {\n    \"materia_prima\": [\"porosidad\", \"poro\", \"inclusion\", \"aleacion\", \"colada\", \"lote de material\", \"impureza\"],\n    \"ajuste_proceso\": [\"temperatura\", \"presion\", \"parametro\", \"tiempo de ciclo\", \"velocidad\", \"enfriamiento\"],\n    \"herramienta_molde\": [\"molde\", \"matriz\", \"desgaste\", \"desgastad\", \"herramienta\", \"cavidad\"],\n    \"operacion_manual\": [\"operador\", \"golpe\", \"manipulacion\", \"caida\", \"procedimiento\", \"turno\"],\n    \"medicion_inspeccion\": [\"calibr\", \"medicion\", \"instrumento\", \"pie de metro\", \"micrometro\", \"galga\"],\n}\nSIN = \"sin_clasificar\"\nTILDES = str.maketrans(\"áéíóúüñÁÉÍÓÚÜÑ\", \"aeiouunaeiouun\")\n\n\ndef leer_entrada():\n    \"\"\"Runner Python nativo de n8n: `_items` es una lista de dicts {\"json\": {...}}.\n    Ojo: el sandbox restringe builtins (p. ej. `hasattr` no existe; verificado\n    en la ejecucion 100 de n8n), por eso no se usan hasattr/isinstance.\"\"\"\n    return _items[0][\"json\"]  # noqa: F821  (variable inyectada por n8n)\n\n\ndef por_reglas(texto):\n    t = str(texto).lower().translate(TILDES)\n    puntos = {c: sum(1 for k in REGLAS[c] if k in t) for c in CLASES}\n    mejor = max(CLASES, key=lambda c: puntos[c])\n    return mejor if puntos[mejor] > 0 else SIN\n\n\ndef unitario(v):\n    n = sum(x * x for x in v) ** 0.5\n    return [x / n for x in v] if n > 0 else v\n\n\ndef metricas(reales, pred):\n    n = len(reales)\n    if n == 0:\n        return {\"n\": 0, \"accuracy\": None, \"f1_macro\": None}\n    acc = sum(1 for r, p in zip(reales, pred) if r == p) / n\n    f1s = []\n    for c in CLASES:\n        tp = sum(1 for r, p in zip(reales, pred) if r == c and p == c)\n        fp = sum(1 for r, p in zip(reales, pred) if r != c and p == c)\n        fn = sum(1 for r, p in zip(reales, pred) if r == c and p != c)\n        pr = tp / (tp + fp) if tp + fp else 0.0\n        rc = tp / (tp + fn) if tp + fn else 0.0\n        f1s.append(2 * pr * rc / (pr + rc) if pr + rc else 0.0)\n    return {\"n\": n, \"accuracy\": round(acc, 4), \"f1_macro\": round(sum(f1s) / len(f1s), 4)}\n\n\nd = leer_entrada()\nreportes = d.get(\"reportes\") or []\nemb = d.get(\"embeddings\")\nusar_tf = bool(emb) and len(emb) == len(reportes)\nmotivo = d.get(\"motivo_sin_transformer\") or (\"\" if usar_tf else \"Sin embeddings\")\n\n# 1. Reglas para todos los reportes\nfor r in reportes:\n    r[\"causa_reglas\"] = por_reglas(r.get(\"texto\", \"\"))\n\n# 2. Transformer: centroides con los reportes de referencia\nif usar_tf:\n    vect = [unitario(v) for v in emb]\n    centroides = {}\n    for c in CLASES:\n        grupo = [vect[i] for i, r in enumerate(reportes) if r[\"rol\"] == \"referencia\" and r[\"causa_real\"] == c]\n        if grupo:\n            centroides[c] = unitario([sum(col) / len(grupo) for col in zip(*grupo)])\n    if len(centroides) < 2:\n        usar_tf, motivo = False, \"Menos de 2 causas con reportes de referencia\"\n    else:\n        for i, r in enumerate(reportes):\n            sims = {c: sum(a * b for a, b in zip(vect[i], cv)) for c, cv in centroides.items()}\n            mejor = max(sims, key=sims.get)\n            r[\"causa_transformer\"] = mejor\n            r[\"similitud\"] = round(sims[mejor], 4)\n\n# 3. Metricas en el conjunto de prueba (mismos datos para ambos metodos)\nprueba = [r for r in reportes if r[\"rol\"] == \"prueba\" and r[\"causa_real\"] in CLASES]\nreales = [r[\"causa_real\"] for r in prueba]\nm_reglas = metricas(reales, [r[\"causa_reglas\"] for r in prueba])\nm_tf = metricas(reales, [r.get(\"causa_transformer\", SIN) for r in prueba]) if usar_tf else None\nif m_tf and m_tf[\"accuracy\"] is not None and m_reglas[\"accuracy\"] is not None:\n    ganador = (\"Transformer\" if m_tf[\"f1_macro\"] > m_reglas[\"f1_macro\"]\n               else \"Reglas\" if m_tf[\"f1_macro\"] < m_reglas[\"f1_macro\"] else \"Empate\")\nelse:\n    ganador = \"No evaluable\"\n\n# 4. Reportes de operacion (los \"nuevos\" del turno)\noper = [r for r in reportes if r[\"rol\"] == \"operacion\"]\n# Navaja de Occam: para los reportes nuevos se usa el metodo con MEJOR F1 en\n# prueba en esta misma corrida (en la evaluacion offline ganaron las reglas).\nclave = \"causa_transformer\" if usar_tf and ganador == \"Transformer\" else \"causa_reglas\"\ndist = {}\nfor r in oper:\n    dist[r[clave]] = dist.get(r[clave], 0) + 1\nprincipal = max(dist, key=dist.get) if dist else \"sin_datos\"\nconcord = (round(100 * sum(1 for r in oper if r.get(\"causa_transformer\") == r[\"causa_reglas\"]) / len(oper), 1)\n           if usar_tf and oper else None)\ncasos = sorted(oper, key=lambda r: r.get(\"fecha\", \"\"), reverse=True)[:8]\n\n# 5. Recuperacion (RAG): los 3 reportes de operacion mas cercanos a la causa\n#    principal (coseno contra su centroide; sin embeddings, coincidencia por\n#    reglas). El LLM los recibe con id y extracto y debe citarlos [NC-xxx].\nevidencia = []\nif principal != \"sin_datos\":\n    if usar_tf and principal in centroides:\n        cand = [(sum(a * b for a, b in zip(vect[i], centroides[principal])), r)\n                for i, r in enumerate(reportes) if r[\"rol\"] == \"operacion\"]\n    else:\n        cand = [(1.0 if r[\"causa_reglas\"] == principal else 0.0, r) for r in oper]\n    cand = sorted(cand, key=lambda x: x[0], reverse=True)[:3]\n    evidencia = [{\"id_reporte\": r[\"id_reporte\"], \"fecha\": r.get(\"fecha\", \"\"), \"causa_asignada\": r.get(clave),\n                  \"relevancia\": round(s, 4), \"extracto\": str(r.get(\"texto\", \"\"))[:200]}\n                 for s, r in cand if s > 0]\n\nreturn [{\"json\": {\n    \"tipo\": \"NLP_TRANSFORMER\",\n    \"modulo\": \"Transformer_NLP_Clasificacion\",\n    \"transformer_ejecutado\": usar_tf,\n    \"modelo\": \"sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2\" if usar_tf else \"reglas_palabras_clave\",\n    \"metodo\": \"centroide_coseno_sobre_embeddings\" if usar_tf else \"reglas_palabras_clave\",\n    \"motivo_sin_transformer\": \"\" if usar_tf else motivo,\n    \"n_referencia\": sum(1 for r in reportes if r[\"rol\"] == \"referencia\"),\n    \"n_prueba\": len(prueba),\n    \"n_operacion\": len(oper),\n    \"metricas_prueba\": {\"transformer\": m_tf, \"reglas\": m_reglas},\n    \"mejor_metodo_en_prueba_f1\": ganador,\n    \"metodo_usado_operacion\": \"Transformer\" if clave == \"causa_transformer\" else \"Reglas\",\n    \"distribucion_causas_operacion\": dist,\n    \"causa_principal_operacion\": principal,\n    \"concordancia_transformer_reglas_pct\": concord,\n    \"casos_operacion\": [{\"id_reporte\": r[\"id_reporte\"], \"fecha\": r.get(\"fecha\", \"\"),\n                         \"causa_transformer\": r.get(\"causa_transformer\"), \"similitud\": r.get(\"similitud\"),\n                         \"causa_reglas\": r[\"causa_reglas\"]} for r in casos],\n    \"origen_embeddings\": d.get(\"origen_embeddings\") or (\"HF_EN_VIVO\" if usar_tf else \"NINGUNO\"),\n    \"evidencia_documental\": evidencia,\n    \"descartados_validacion\": d.get(\"descartados\") or [],\n    \"origen\": \"SIMULADO_ACADEMICO_NO_REAL\",\n}}]\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1824,14 +1836,14 @@
         944,
         1056
       ],
-      "id": "3d1385af-9d5a-4d46-a380-ffbf96e9f583",
+      "id": "06064cb2-8b62-4cd0-b1e7-dbcce247efc0",
       "name": "Clasificar_NLP_Python",
       "notes": "Python (nativo). Si tu instancia no tiene Python, habilita Clasificar_NLP_JS_respaldo y deshabilita este.",
       "notesInFlow": true
     },
     {
       "parameters": {
-        "jsCode": "/*\n VISIONGUARD v2.2 - CLASIFICACION NLP (RESPALDO EN JAVASCRIPT)\n Traduccion 1:1 de clasificar_nlp.py. Usar SOLO si la instancia n8n no\n permite Python: habilitar este nodo, deshabilitar Clasificar_NLP_Python y\n conectar este nodo a la entrada 4 del Merge.\n*/\nconst CLASES = ['materia_prima', 'ajuste_proceso', 'herramienta_molde', 'operacion_manual', 'medicion_inspeccion'];\nconst REGLAS = {\n  materia_prima: ['porosidad', 'poro', 'inclusion', 'aleacion', 'colada', 'lote de material', 'impureza'],\n  ajuste_proceso: ['temperatura', 'presion', 'parametro', 'tiempo de ciclo', 'velocidad', 'enfriamiento'],\n  herramienta_molde: ['molde', 'matriz', 'desgaste', 'desgastad', 'herramienta', 'cavidad'],\n  operacion_manual: ['operador', 'golpe', 'manipulacion', 'caida', 'procedimiento', 'turno'],\n  medicion_inspeccion: ['calibr', 'medicion', 'instrumento', 'pie de metro', 'micrometro', 'galga']\n};\nconst SIN = 'sin_clasificar';\nconst norm = t => String(t ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');\nconst porReglas = t => {\n  const s = norm(t);\n  const p = Object.fromEntries(CLASES.map(c => [c, REGLAS[c].filter(k => s.includes(k)).length]));\n  const mejor = CLASES.reduce((a, b) => (p[b] > p[a] ? b : a));\n  return p[mejor] > 0 ? mejor : SIN;\n};\nconst unit = v => { const n = Math.sqrt(v.reduce((s, x) => s + x * x, 0)); return n > 0 ? v.map(x => x / n) : v; };\nconst metricas = (reales, pred) => {\n  const n = reales.length;\n  if (!n) return { n: 0, accuracy: null, f1_macro: null };\n  const acc = reales.filter((r, i) => r === pred[i]).length / n;\n  const f1 = CLASES.map(c => {\n    const tp = reales.filter((r, i) => r === c && pred[i] === c).length;\n    const fp = reales.filter((r, i) => r !== c && pred[i] === c).length;\n    const fn = reales.filter((r, i) => r === c && pred[i] !== c).length;\n    const pr = tp + fp ? tp / (tp + fp) : 0, rc = tp + fn ? tp / (tp + fn) : 0;\n    return pr + rc ? 2 * pr * rc / (pr + rc) : 0;\n  });\n  return { n, accuracy: +acc.toFixed(4), f1_macro: +(f1.reduce((a, b) => a + b, 0) / f1.length).toFixed(4) };\n};\n\nconst d = $input.first().json;\nconst reportes = (d.reportes || []).map(r => ({ ...r, causa_reglas: porReglas(r.texto) }));\nlet usarTf = Array.isArray(d.embeddings) && d.embeddings.length === reportes.length && reportes.length > 0;\nlet motivo = d.motivo_sin_transformer || (usarTf ? '' : 'Sin embeddings');\n\nif (usarTf) {\n  const vect = d.embeddings.map(unit);\n  const cent = {};\n  for (const c of CLASES) {\n    const g = vect.filter((v, i) => reportes[i].rol === 'referencia' && reportes[i].causa_real === c);\n    if (g.length) cent[c] = unit(g[0].map((_, j) => g.reduce((s, v) => s + v[j], 0) / g.length));\n  }\n  if (Object.keys(cent).length < 2) { usarTf = false; motivo = 'Menos de 2 causas con reportes de referencia'; }\n  else reportes.forEach((r, i) => {\n    let mejor = null, sim = -2;\n    for (const [c, cv] of Object.entries(cent)) {\n      const s = vect[i].reduce((a, x, j) => a + x * cv[j], 0);\n      if (s > sim) { sim = s; mejor = c; }\n    }\n    r.causa_transformer = mejor; r.similitud = +sim.toFixed(4);\n  });\n}\n\nconst prueba = reportes.filter(r => r.rol === 'prueba' && CLASES.includes(r.causa_real));\nconst reales = prueba.map(r => r.causa_real);\nconst mReglas = metricas(reales, prueba.map(r => r.causa_reglas));\nconst mTf = usarTf ? metricas(reales, prueba.map(r => r.causa_transformer ?? SIN)) : null;\nconst ganador = mTf && mTf.accuracy !== null && mReglas.accuracy !== null\n  ? (mTf.f1_macro > mReglas.f1_macro ? 'Transformer' : mTf.f1_macro < mReglas.f1_macro ? 'Reglas' : 'Empate')\n  : 'No evaluable';\nconst oper = reportes.filter(r => r.rol === 'operacion');\n// Navaja de Occam: se usa el metodo con mejor F1 en prueba en esta corrida.\nconst clave = usarTf && ganador === 'Transformer' ? 'causa_transformer' : 'causa_reglas';\nconst dist = {};\noper.forEach(r => { dist[r[clave]] = (dist[r[clave]] || 0) + 1; });\nconst principal = Object.keys(dist).length ? Object.keys(dist).reduce((a, b) => (dist[b] > dist[a] ? b : a)) : 'sin_datos';\nconst concord = usarTf && oper.length\n  ? +(100 * oper.filter(r => r.causa_transformer === r.causa_reglas).length / oper.length).toFixed(1) : null;\n\nreturn [{ json: {\n  tipo: 'NLP_TRANSFORMER', modulo: 'Transformer_NLP_Clasificacion', transformer_ejecutado: usarTf,\n  modelo: usarTf ? 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2' : 'reglas_palabras_clave',\n  metodo: usarTf ? 'centroide_coseno_sobre_embeddings' : 'reglas_palabras_clave',\n  motivo_sin_transformer: usarTf ? '' : motivo,\n  n_referencia: reportes.filter(r => r.rol === 'referencia').length, n_prueba: prueba.length, n_operacion: oper.length,\n  metricas_prueba: { transformer: mTf, reglas: mReglas }, mejor_metodo_en_prueba_f1: ganador,\n  metodo_usado_operacion: clave === 'causa_transformer' ? 'Transformer' : 'Reglas',\n  distribucion_causas_operacion: dist, causa_principal_operacion: principal,\n  concordancia_transformer_reglas_pct: concord,\n  casos_operacion: [...oper].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 8)\n    .map(r => ({ id_reporte: r.id_reporte, fecha: r.fecha, causa_transformer: r.causa_transformer ?? null,\n                 similitud: r.similitud ?? null, causa_reglas: r.causa_reglas })),\n  descartados_validacion: d.descartados || [], origen: 'SIMULADO_ACADEMICO_NO_REAL'\n} }];\n"
+        "jsCode": "/*\n VISIONGUARD v2.2 - CLASIFICACION NLP (RESPALDO EN JAVASCRIPT)\n Traduccion 1:1 de clasificar_nlp.py. Usar SOLO si la instancia n8n no\n permite Python: habilitar este nodo, deshabilitar Clasificar_NLP_Python y\n conectar este nodo a la entrada 4 del Merge.\n*/\nconst CLASES = ['materia_prima', 'ajuste_proceso', 'herramienta_molde', 'operacion_manual', 'medicion_inspeccion'];\nconst REGLAS = {\n  materia_prima: ['porosidad', 'poro', 'inclusion', 'aleacion', 'colada', 'lote de material', 'impureza'],\n  ajuste_proceso: ['temperatura', 'presion', 'parametro', 'tiempo de ciclo', 'velocidad', 'enfriamiento'],\n  herramienta_molde: ['molde', 'matriz', 'desgaste', 'desgastad', 'herramienta', 'cavidad'],\n  operacion_manual: ['operador', 'golpe', 'manipulacion', 'caida', 'procedimiento', 'turno'],\n  medicion_inspeccion: ['calibr', 'medicion', 'instrumento', 'pie de metro', 'micrometro', 'galga']\n};\nconst SIN = 'sin_clasificar';\nconst norm = t => String(t ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');\nconst porReglas = t => {\n  const s = norm(t);\n  const p = Object.fromEntries(CLASES.map(c => [c, REGLAS[c].filter(k => s.includes(k)).length]));\n  const mejor = CLASES.reduce((a, b) => (p[b] > p[a] ? b : a));\n  return p[mejor] > 0 ? mejor : SIN;\n};\nconst unit = v => { const n = Math.sqrt(v.reduce((s, x) => s + x * x, 0)); return n > 0 ? v.map(x => x / n) : v; };\nconst metricas = (reales, pred) => {\n  const n = reales.length;\n  if (!n) return { n: 0, accuracy: null, f1_macro: null };\n  const acc = reales.filter((r, i) => r === pred[i]).length / n;\n  const f1 = CLASES.map(c => {\n    const tp = reales.filter((r, i) => r === c && pred[i] === c).length;\n    const fp = reales.filter((r, i) => r !== c && pred[i] === c).length;\n    const fn = reales.filter((r, i) => r === c && pred[i] !== c).length;\n    const pr = tp + fp ? tp / (tp + fp) : 0, rc = tp + fn ? tp / (tp + fn) : 0;\n    return pr + rc ? 2 * pr * rc / (pr + rc) : 0;\n  });\n  return { n, accuracy: +acc.toFixed(4), f1_macro: +(f1.reduce((a, b) => a + b, 0) / f1.length).toFixed(4) };\n};\n\nconst d = $input.first().json;\nconst reportes = (d.reportes || []).map(r => ({ ...r, causa_reglas: porReglas(r.texto) }));\nlet usarTf = Array.isArray(d.embeddings) && d.embeddings.length === reportes.length && reportes.length > 0;\nlet motivo = d.motivo_sin_transformer || (usarTf ? '' : 'Sin embeddings');\n\nif (usarTf) {\n  const vect = d.embeddings.map(unit);\n  const cent = {};\n  for (const c of CLASES) {\n    const g = vect.filter((v, i) => reportes[i].rol === 'referencia' && reportes[i].causa_real === c);\n    if (g.length) cent[c] = unit(g[0].map((_, j) => g.reduce((s, v) => s + v[j], 0) / g.length));\n  }\n  if (Object.keys(cent).length < 2) { usarTf = false; motivo = 'Menos de 2 causas con reportes de referencia'; }\n  else reportes.forEach((r, i) => {\n    let mejor = null, sim = -2;\n    for (const [c, cv] of Object.entries(cent)) {\n      const s = vect[i].reduce((a, x, j) => a + x * cv[j], 0);\n      if (s > sim) { sim = s; mejor = c; }\n    }\n    r.causa_transformer = mejor; r.similitud = +sim.toFixed(4);\n  });\n}\n\nconst prueba = reportes.filter(r => r.rol === 'prueba' && CLASES.includes(r.causa_real));\nconst reales = prueba.map(r => r.causa_real);\nconst mReglas = metricas(reales, prueba.map(r => r.causa_reglas));\nconst mTf = usarTf ? metricas(reales, prueba.map(r => r.causa_transformer ?? SIN)) : null;\nconst ganador = mTf && mTf.accuracy !== null && mReglas.accuracy !== null\n  ? (mTf.f1_macro > mReglas.f1_macro ? 'Transformer' : mTf.f1_macro < mReglas.f1_macro ? 'Reglas' : 'Empate')\n  : 'No evaluable';\nconst oper = reportes.filter(r => r.rol === 'operacion');\n// Navaja de Occam: se usa el metodo con mejor F1 en prueba en esta corrida.\nconst clave = usarTf && ganador === 'Transformer' ? 'causa_transformer' : 'causa_reglas';\nconst dist = {};\noper.forEach(r => { dist[r[clave]] = (dist[r[clave]] || 0) + 1; });\nconst principal = Object.keys(dist).length ? Object.keys(dist).reduce((a, b) => (dist[b] > dist[a] ? b : a)) : 'sin_datos';\nconst concord = usarTf && oper.length\n  ? +(100 * oper.filter(r => r.causa_transformer === r.causa_reglas).length / oper.length).toFixed(1) : null;\n\n// Recuperacion (RAG): 3 reportes de operacion mas cercanos a la causa principal\nlet evidencia = [];\nif (principal !== 'sin_datos') {\n  const vect = usarTf ? d.embeddings.map(unit) : null;\n  const centP = usarTf ? (() => {\n    const g = vect.filter((v, i) => reportes[i].rol === 'referencia' && reportes[i].causa_real === principal);\n    return g.length ? unit(g[0].map((_, j) => g.reduce((s, v) => s + v[j], 0) / g.length)) : null;\n  })() : null;\n  const cand = reportes.map((r, i) => ({ r, i })).filter(x => x.r.rol === 'operacion').map(({ r, i }) => ({\n    r, s: centP ? vect[i].reduce((a, x, j) => a + x * centP[j], 0) : (r.causa_reglas === principal ? 1 : 0)\n  }));\n  evidencia = cand.sort((a, b) => b.s - a.s).slice(0, 3).filter(x => x.s > 0).map(({ r, s }) => ({\n    id_reporte: r.id_reporte, fecha: r.fecha, causa_asignada: r[clave], relevancia: +s.toFixed(4),\n    extracto: String(r.texto ?? '').slice(0, 200)\n  }));\n}\n\nreturn [{ json: {\n  tipo: 'NLP_TRANSFORMER', modulo: 'Transformer_NLP_Clasificacion', transformer_ejecutado: usarTf,\n  modelo: usarTf ? 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2' : 'reglas_palabras_clave',\n  metodo: usarTf ? 'centroide_coseno_sobre_embeddings' : 'reglas_palabras_clave',\n  motivo_sin_transformer: usarTf ? '' : motivo,\n  n_referencia: reportes.filter(r => r.rol === 'referencia').length, n_prueba: prueba.length, n_operacion: oper.length,\n  metricas_prueba: { transformer: mTf, reglas: mReglas }, mejor_metodo_en_prueba_f1: ganador,\n  metodo_usado_operacion: clave === 'causa_transformer' ? 'Transformer' : 'Reglas',\n  distribucion_causas_operacion: dist, causa_principal_operacion: principal,\n  concordancia_transformer_reglas_pct: concord,\n  casos_operacion: [...oper].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))).slice(0, 8)\n    .map(r => ({ id_reporte: r.id_reporte, fecha: r.fecha, causa_transformer: r.causa_transformer ?? null,\n                 similitud: r.similitud ?? null, causa_reglas: r.causa_reglas })),\n  origen_embeddings: d.origen_embeddings || (usarTf ? 'HF_EN_VIVO' : 'NINGUNO'), evidencia_documental: evidencia,\n  descartados_validacion: d.descartados || [], origen: 'SIMULADO_ACADEMICO_NO_REAL'\n} }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1839,9 +1851,31 @@
         944,
         1248
       ],
-      "id": "4d6d2ce6-15bc-4b06-aee8-6536328492d8",
+      "id": "51d2855e-56d0-4dac-99df-8ec66bfe59a1",
       "name": "Clasificar_NLP_JS_respaldo",
       "disabled": true
+    },
+    {
+      "parameters": {
+        "url": "https://raw.githubusercontent.com/scalaspa215/visionguard-industrial/main/hito2/python/nlp/embeddings_nc_minilm.json",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        656,
+        1248
+      ],
+      "id": "e2508a6a-24e1-4736-8ffc-e28e86a478ed",
+      "name": "Indice_Embeddings_GitHub",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput",
+      "notes": "Indice MiniLM precalculado (python/nlp/indexar_embeddings.py). Respaldo si Hugging Face falla.",
+      "notesInFlow": true
     },
     {
       "parameters": {
@@ -1854,7 +1888,7 @@
         2560,
         672
       ],
-      "id": "3bf39c2f-458a-4c6b-8a14-a4761b6531f5",
+      "id": "37d1d31a-0363-4e21-8b0a-7e94fb022a36",
       "name": "Loop_Inspecciones"
     },
     {
@@ -1884,9 +1918,12 @@
         3024,
         400
       ],
-      "id": "aaea104f-4241-40de-8291-6769ab89cc7d",
+      "id": "96f8c995-54fd-4048-99f1-5d18bc44ef96",
       "name": "Mover_A_Procesadas",
-      "onError": "continueRegularOutput"
+      "onError": "continueRegularOutput",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {},
@@ -1896,15 +1933,16 @@
         3104,
         880
       ],
-      "id": "760238e1-f72f-4ec8-85a1-a9b774acb870",
+      "id": "a6f1ef9b-be73-41e8-981d-7a31e4780f59",
       "name": "Preparar_Registro_Final"
     },
     {
       "parameters": {
         "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
-        "text": "={{ (() => { const d = $('Preparar_Registro_Final').first().json; const icono = d.decision_humana === 'APROBAR' ? '✅' : (d.decision_humana === 'RECHAZAR' ? '⛔' : '⏰'); return `${icono} VISIONGUARD · DECISIÓN HUMANA\\n📁 ${d.archivo}\\n👤 ${d.decision_humana} → ${d.estado}\\n🕒 ${d.fecha_decision_humana}\\n📊 Panel: ${$('Config').first().json.dashboard_url}`; })() }}",
+        "text": "={{ (() => { const h = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); const d = $('Preparar_Registro_Final').first().json; const icono = d.decision_humana === 'APROBAR' ? '✅' : (d.decision_humana === 'RECHAZAR' ? '⛔' : '⏰'); return h(`${icono} VISIONGUARD · DECISIÓN HUMANA\\n📁 ${d.archivo}\\n👤 ${d.decision_humana} → ${d.estado}\\n🕒 ${d.fecha_decision_humana}\\n📊 Panel: ${$('Config').first().json.dashboard_url}`); })() }}",
         "additionalFields": {
-          "appendAttribution": false
+          "appendAttribution": false,
+          "parse_mode": "HTML"
         }
       },
       "type": "n8n-nodes-base.telegram",
@@ -1913,7 +1951,7 @@
         3680,
         880
       ],
-      "id": "355dc958-cba3-41a9-87d6-545aa01f81ed",
+      "id": "80f69b82-15f9-44ca-a254-79e856d13e8e",
       "name": "Notificacion_Final_Telegram",
       "retryOnFail": true,
       "onError": "continueRegularOutput"
@@ -1931,8 +1969,8 @@
         -480,
         -240
       ],
-      "id": "43efe9dd-c919-466b-9854-e12fd6c20e3f",
-      "name": "Nota 57"
+      "id": "e4ba37bc-fb03-4d68-9995-ca58c1bb4628",
+      "name": "Nota 58"
     },
     {
       "parameters": {
@@ -1947,8 +1985,8 @@
         1680,
         300
       ],
-      "id": "5a7084cd-07d5-4c43-a819-52a11a17db0f",
-      "name": "Nota 58"
+      "id": "01dd0d7e-9806-4473-922a-fa43e215fea8",
+      "name": "Nota 59"
     },
     {
       "parameters": {
@@ -1963,8 +2001,8 @@
         2520,
         1040
       ],
-      "id": "93b2d868-d1f8-4756-b7ce-8135250103f9",
-      "name": "Nota 59"
+      "id": "7726204e-dc10-4415-aa33-9cdbb8d24176",
+      "name": "Nota 60"
     },
     {
       "parameters": {
@@ -1979,8 +2017,8 @@
         1680,
         -300
       ],
-      "id": "1787f548-de56-464c-9431-abbe3efb7858",
-      "name": "Nota 60"
+      "id": "4866a510-7aa9-492d-a82b-ecbf15c5d75a",
+      "name": "Nota 61"
     }
   ],
   "pinData": {},
@@ -2484,6 +2522,17 @@
       ]
     },
     "Unir_Textos_Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Indice_Embeddings_GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Indice_Embeddings_GitHub": {
       "main": [
         [
           {

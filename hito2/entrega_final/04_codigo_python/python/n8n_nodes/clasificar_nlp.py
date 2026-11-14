@@ -110,6 +110,21 @@ concord = (round(100 * sum(1 for r in oper if r.get("causa_transformer") == r["c
            if usar_tf and oper else None)
 casos = sorted(oper, key=lambda r: r.get("fecha", ""), reverse=True)[:8]
 
+# 5. Recuperacion (RAG): los 3 reportes de operacion mas cercanos a la causa
+#    principal (coseno contra su centroide; sin embeddings, coincidencia por
+#    reglas). El LLM los recibe con id y extracto y debe citarlos [NC-xxx].
+evidencia = []
+if principal != "sin_datos":
+    if usar_tf and principal in centroides:
+        cand = [(sum(a * b for a, b in zip(vect[i], centroides[principal])), r)
+                for i, r in enumerate(reportes) if r["rol"] == "operacion"]
+    else:
+        cand = [(1.0 if r["causa_reglas"] == principal else 0.0, r) for r in oper]
+    cand = sorted(cand, key=lambda x: x[0], reverse=True)[:3]
+    evidencia = [{"id_reporte": r["id_reporte"], "fecha": r.get("fecha", ""), "causa_asignada": r.get(clave),
+                  "relevancia": round(s, 4), "extracto": str(r.get("texto", ""))[:200]}
+                 for s, r in cand if s > 0]
+
 return [{"json": {
     "tipo": "NLP_TRANSFORMER",
     "modulo": "Transformer_NLP_Clasificacion",
@@ -129,6 +144,8 @@ return [{"json": {
     "casos_operacion": [{"id_reporte": r["id_reporte"], "fecha": r.get("fecha", ""),
                          "causa_transformer": r.get("causa_transformer"), "similitud": r.get("similitud"),
                          "causa_reglas": r["causa_reglas"]} for r in casos],
+    "origen_embeddings": d.get("origen_embeddings") or ("HF_EN_VIVO" if usar_tf else "NINGUNO"),
+    "evidencia_documental": evidencia,
     "descartados_validacion": d.get("descartados") or [],
     "origen": "SIMULADO_ACADEMICO_NO_REAL",
 }}]

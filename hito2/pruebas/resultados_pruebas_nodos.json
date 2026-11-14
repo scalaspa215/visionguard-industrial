@@ -92,6 +92,23 @@
     ]
   },
   {
+    "caso": "12b Cita RAG valida y cita inventada",
+    "ok": true,
+    "detalle": [
+      [
+        "NC-093"
+      ],
+      [
+        "NC-999"
+      ]
+    ]
+  },
+  {
+    "caso": "12c Campo con \"Sin información suficiente\" se acepta",
+    "ok": true,
+    "detalle": "LLM_VALIDADO"
+  },
+  {
     "caso": "12 Respuesta envuelta en ```json``` se acepta",
     "ok": true,
     "detalle": "LLM_VALIDADO"
@@ -121,8 +138,42 @@
     }
   },
   {
-    "caso": "15 NLP sin token HF -> solo reglas",
+    "caso": "15 NLP sin HF ni indice -> solo reglas",
     "ok": true,
-    "detalle": "HTTP: 401 Unauthorized"
+    "detalle": "HF: 401 Unauthorized | Indice: GitHub caido"
+  },
+  {
+    "caso": "16 HF caido + indice MiniLM real -> Transformer (F1 0.3469 como offline)",
+    "ok": true,
+    "detalle": {
+      "origen": "INDICE_PRECALCULADO",
+      "m": {
+        "transformer": {
+          "n": 40,
+          "accuracy": 0.375,
+          "f1_macro": 0.3469
+        },
+        "reglas": {
+          "n": 40,
+          "accuracy": 0.425,
+          "f1_macro": 0.5154
+        }
+      },
+      "usado": "Reglas"
+    }
+  },
+  {
+    "caso": "16b Indice recibido como texto (data) se parsea",
+    "ok": true,
+    "detalle": "INDICE_PRECALCULADO"
+  },
+  {
+    "caso": "17 RAG: evidencia documental recuperada (3 reportes con extracto)",
+    "ok": true,
+    "detalle": [
+      "NC-095 0.8245",
+      "NC-098 0.7641",
+      "NC-101 0.7611"
+    ]
   }
 ]

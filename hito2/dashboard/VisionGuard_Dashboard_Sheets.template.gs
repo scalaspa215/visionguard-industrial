@@ -110,6 +110,9 @@ function construirDashboard() {
   ['R2', 'R3', 'R4'].forEach((c, i) => aux.getRange(c).setFormula(`=COUNTIF(B2:B,Q${i + 2})`));
   aux.getRange('T1').setFormula('=IFERROR(QUERY(A2:F,"select D, count(F) where F<>\'\' group by D pivot A label D \'Fecha\'",0),"")');
   aux.getRange('Z1').setFormula('=IFERROR(QUERY(A2:F,"select D, avg(C) where F<>\'\' group by D label D \'Fecha\', avg(C) \'Confianza media\'",0),"")');
+  // Fechas visibles como fecha (no como numero serial 46339) en los graficos temporales
+  aux.getRange('T2:T').setNumberFormat('yyyy-mm-dd');
+  aux.getRange('Z2:Z').setNumberFormat('yyyy-mm-dd');
   aux.getRange('AC1').setFormula('=IFERROR(QUERY(E2:F,"select E, count(F) where F<>\'\' group by E label E \'Estado\', count(F) \'Inspecciones\'",0),"")');
 
   // historial GRU (todas las ejecuciones registradas)
@@ -191,7 +194,8 @@ function construirDashboard() {
 
   // ---------- graficos
   const grafico = (tipo, rangos, fila, columna, titulo, opciones = {}) => {
-    let b = dash.newChart().setChartType(tipo).setPosition(fila, columna, 0, 0).setOption('title', titulo)
+    // setNumHeaders(1): la primera fila son rotulos, no datos (corrige 'Modelo'/'Estado' como categoria)
+    let b = dash.newChart().setChartType(tipo).setNumHeaders(1).setPosition(fila, columna, 0, 0).setOption('title', titulo)
       .setOption('width', 470).setOption('height', 270).setOption('legend', { position: 'bottom' })
       .setOption('titleTextStyle', { color: VG.AZUL, fontSize: 13, bold: true });
     rangos.forEach(r => { b = b.addRange(aux.getRange(r)); });
@@ -201,19 +205,24 @@ function construirDashboard() {
   const C = Charts.ChartType;
   grafico(C.PIE, ['N1:O3'], 10, 2, '1 · Clasificación ResNet18 (filtrada)', { pieHole: 0.55, colors: [VG.VERDE, VG.CORAL] });
   grafico(C.COLUMN, ['Q1:R4'], 10, 6, '2 · Prioridad asignada', { colors: [VG.NARANJA], legend: { position: 'none' } });
-  grafico(C.COLUMN, ['T1:W60'], 10, 10, '3 · Inspecciones por día y clase', { isStacked: true, colors: [VG.VERDE, VG.CORAL] });
-  grafico(C.LINE, ['Z1:AA60'], 24, 2, '4 · Confianza media ResNet18 en el tiempo', { colors: [VG.ACENTO], vAxis: { format: 'percent' }, pointSize: 5 });
+  grafico(C.COLUMN, ['T1:W60'], 10, 10, '3 · Inspecciones por día y clase', { isStacked: true, colors: [VG.VERDE, VG.CORAL], hAxis: { format: 'dd-MM', title: 'Fecha' }, vAxis: { title: 'Piezas' } });
+  grafico(C.LINE, ['Z1:AA60'], 24, 2, '4 · Confianza media ResNet18 en el tiempo', { colors: [VG.ACENTO], vAxis: { format: 'percent', title: 'Confianza' }, hAxis: { format: 'dd-MM', title: 'Fecha' }, pointSize: 5 });
   grafico(C.BAR, ['AC1:AD8'], 24, 6, '5 · Decisiones humanas (estado)', { colors: [VG.VERDE], legend: { position: 'none' } });
   if (gru) grafico(C.LINE, ['AF1:AI60'], 24, 10, '6 · GRU: pronóstico por línea en el tiempo (simulado)', { pointSize: 5 });
-  grafico(C.COLUMN, ['AN1:AP8'], 38, 2, '7 · Series: MAE (pp) validación vs prueba', { colors: ['#9fb3e6', VG.ACENTO] });
+  grafico(C.COLUMN, ['AN1:AP8'], 38, 2, '7 · Series: MAE (pp) validación vs prueba', { colors: ['#9fb3e6', VG.ACENTO], vAxis: { title: 'MAE (puntos porcentuales)' } });
   grafico(C.COLUMN, ['AR1:AT3'], 38, 6, '8 · NLP: Transformer vs reglas (prueba)', { colors: ['#9fb3e6', VG.ACENTO] });
-  grafico(C.COLUMN, ['AV1:AW4'], 38, 10, '9 · ROI año 1 por escenario (estimado)', { colors: [VG.ACENTO], legend: { position: 'none' } });
+  grafico(C.COLUMN, ['AV1:AW4'], 38, 10, '9 · ROI año 1 por escenario (estimado)', { colors: [VG.ACENTO], legend: { position: 'none' }, vAxis: { title: 'ROI (%)' } });
+  if (EVIDENCIA.imagenes) {
+    ev(1, 51, EVIDENCIA.imagenes);   // AY
+    grafico(C.COLUMN, ['AY1:BA6'], 86, 2, '10 · Imágenes: ResNet18 vs alternativas (test 715)', { colors: ['#9fb3e6', VG.CORAL], vAxis: { title: '%' } });
+  }
 
   // ---------- registro de recomendaciones del LLM
   dash.getRange('B52').setValue('Registro de recomendaciones (últimas 15, según filtros)').setFontWeight('bold').setFontSize(13).setFontColor(VG.AZUL);
   dash.getRange('B53').setFormula(`=IFERROR(QUERY(${A}A2:L,"select D, F, A, B, E, I, L where F<>'' order by D desc limit 15 label D 'Fecha', F 'Archivo', A 'Clase', B 'Prioridad', E 'Estado', I 'Fuente', L 'Recomendación'",0),"Sin registros")`);
   dash.getRange('B54:B70').setNumberFormat('yyyy-mm-dd');
   dash.getRange('H53:M70').setWrap(true);
+  dash.setColumnWidth(8, 360);
 
   // ---------- evidencia ResNet18 (Hito 1, test independiente)
   dash.getRange('B73').setValue('Evidencia de modelos (conjuntos de prueba no usados para entrenar)').setFontWeight('bold').setFontSize(13).setFontColor(VG.AZUL);

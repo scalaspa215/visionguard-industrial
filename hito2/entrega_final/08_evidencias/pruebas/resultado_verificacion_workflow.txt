@@ -1,7 +1,7 @@
-OK    VisionGuard_v2.2_Hito2_IMPORTAR.json: nombres de nodo unicos (61)
+OK    VisionGuard_v2.2_Hito2_IMPORTAR.json: nombres de nodo unicos (62)
 OK    VisionGuard_v2.2_Hito2_IMPORTAR.json: conexiones validas 
 OK    VisionGuard_v2.2_Hito2_IMPORTAR.json: codigo y expresiones compilan 
-OK    VisionGuard_v2.2_Hito2_PUBLICO.json: nombres de nodo unicos (61)
+OK    VisionGuard_v2.2_Hito2_PUBLICO.json: nombres de nodo unicos (62)
 OK    VisionGuard_v2.2_Hito2_PUBLICO.json: conexiones validas 
 OK    VisionGuard_v2.2_Hito2_PUBLICO.json: codigo y expresiones compilan 
 OK    VisionGuard_v2.2_Hito2_PUBLICO.json: sin credenciales ni datos personales 

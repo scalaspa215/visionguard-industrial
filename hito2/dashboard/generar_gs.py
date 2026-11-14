@@ -31,6 +31,12 @@ ev = {
     "nota": "Series: datos simulados, 81 puntos de prueba; GRU consultado en su API real. "
             "NLP: 40 reportes NC simulados de prueba. ROI: estimación académica con supuestos explícitos.",
 }
+img_json = PY / "imagenes" / "resultados_imagenes.json"
+if img_json.exists():
+    ri = json.loads(img_json.read_text(encoding="utf-8"))["resultados"]
+    ev["imagenes"] = [["Modelo", "Accuracy %", "F1 defectuosa %"]] + [
+        [k.replace(" (ONNX desplegado)", ""), round(100 * v["accuracy"], 2), round(100 * v["f1_def"], 2)] for k, v in ri.items()]
+    ev["imagenes"] += [["", 0, 0]] * (6 - len(ev["imagenes"]))
 if isinstance(nlp.get("transformer"), dict):
     ev["nlp"].append(["Transformer (MiniLM)", nlp["transformer"]["accuracy"], nlp["transformer"]["f1_macro"]])
 

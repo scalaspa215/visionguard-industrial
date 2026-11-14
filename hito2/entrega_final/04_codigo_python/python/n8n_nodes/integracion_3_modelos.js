@@ -81,8 +81,10 @@ const nlp = nlpTf ? {
   distribucion_causas_operacion: nlpTf.distribucion_causas_operacion,
   causa_principal_operacion: nlpTf.causa_principal_operacion,
   concordancia_transformer_reglas_pct: nlpTf.concordancia_transformer_reglas_pct,
-  casos_operacion: (nlpTf.casos_operacion || []).slice(0, 5)
-} : { transformer_ejecutado: false, causa_principal_operacion: 'sin_datos' };
+  origen_embeddings: nlpTf.origen_embeddings,
+  // Documentos recuperados (RAG): el LLM debe citarlos como [NC-xxx]
+  evidencia_documental: nlpTf.evidencia_documental || []
+} : { transformer_ejecutado: false, causa_principal_operacion: 'sin_datos', evidencia_documental: [] };
 
 return [{
   json: {

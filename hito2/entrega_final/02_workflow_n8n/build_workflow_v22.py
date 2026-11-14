@@ -195,7 +195,13 @@ conectar("Leer_Reportes_NC", "Preparar_Textos_NLP")
 conectar("Preparar_Textos_NLP", "Embeddings_Transformer_HF")
 conectar("Preparar_Textos_NLP", "Unir_Textos_Embeddings", inp=0)
 conectar("Embeddings_Transformer_HF", "Unir_Textos_Embeddings", inp=1)
-conectar("Unir_Textos_Embeddings", "Parsear_Embeddings")
+nodo("Indice_Embeddings_GitHub", "n8n-nodes-base.httpRequest", 4.2, [656, 1248], {
+    "url": "https://raw.githubusercontent.com/scalaspa215/visionguard-industrial/main/hito2/python/nlp/embeddings_nc_minilm.json",
+    "options": {"timeout": 60000}},
+    retryOnFail=True, maxTries=3, waitBetweenTries=3000, onError="continueRegularOutput",
+    notes="Indice MiniLM precalculado (python/nlp/indexar_embeddings.py). Respaldo si Hugging Face falla.", notesInFlow=True)
+conectar("Unir_Textos_Embeddings", "Indice_Embeddings_GitHub")
+conectar("Indice_Embeddings_GitHub", "Parsear_Embeddings")
 conectar("Parsear_Embeddings", "Clasificar_NLP_Python")
 N["Merge"]["parameters"]["numberInputs"] = 4
 conectar("Clasificar_NLP_Python", "Merge", inp=3)
@@ -222,6 +228,11 @@ REEMPLAZOS = [
      "REGLAS DE ALERTAS Y VERIFICACIÓN:\n\n19b. Menciona explícitamente cada elemento de la lista \"alertas\" "
      "y su implicancia.\n\n19c. Todo número que escribas debe aparecer en DATOS RECIBIDOS: un control "
      "automático posterior compara cada cifra de tu respuesta con los datos y marca las no respaldadas.\n\n"
+     "19d. CONTEXTO DOCUMENTAL (RAG): nlp_transformer.evidencia_documental contiene reportes de no conformidad "
+     "recuperados por similitud. Cuando uses uno, cítalo con su identificador entre corchetes, por ejemplo [NC-093]. "
+     "Solo puedes citar identificadores presentes en esa lista; un control automático rechaza citas inexistentes.\n\n"
+     "19e. Si para un campo no hay evidencia suficiente en DATOS RECIBIDOS, escribe exactamente \"Sin información "
+     "suficiente\" en ese campo en lugar de suponer.\n\n"
      "REGLAS DE SEGURIDAD INDUSTRIAL:"),
 ]
 for viejo, nuevo in REEMPLAZOS:
@@ -286,7 +297,7 @@ gm.update({"retryOnFail": True, "maxTries": 3, "waitBetweenTries": 3000, "onErro
 
 tg = N["Notificacion_Telegram_Integrado"]
 tg["parameters"]["chatId"] = "={{ " + CFG + ".telegram_chat_id }}"
-tg["parameters"]["text"] = "={{ (() => { " + PCT + " const c = " + CFG + "; const d = $json; const corto = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; }; return `" + """🛡️ VISIONGUARD · INSPECCIÓN ${d.tiene_alertas ? '🚨' : ''}
+tg["parameters"]["text"] = "={{ (() => { " + PCT + " const h = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); " + " const c = " + CFG + "; const d = $json; const corto = (s, n) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n) + '…' : s; }; return h(`" + """🛡️ VISIONGUARD · INSPECCIÓN ${d.tiene_alertas ? '🚨' : ''}
 📁 ${d.archivo}
 🔍 ResNet18: ${d.clasificacion} (${pct(d.confianza)})
 🚦 Prioridad: ${String(d.prioridad).toUpperCase()}
@@ -298,7 +309,7 @@ ${d.tiene_alertas ? '⚠️ ' + corto(d.alertas, 300) + '\\n' : ''}
 ✅ ${corto(d.recomendacion, 400)}
 
 👤 Revisión humana obligatoria. Responda el correo de aprobación.
-📊 Panel: ${c.dashboard_url}`; })() }}"""
+📊 Panel: ${c.dashboard_url}`); })() }}"""
 tg["parameters"]["additionalFields"] = {"appendAttribution": False}
 tg.update({"retryOnFail": True, "maxTries": 3, "waitBetweenTries": 3000, "onError": "continueRegularOutput"})
 
@@ -379,9 +390,9 @@ N["Send a message2"]["position"] = [3488, 880]
 
 nodo("Notificacion_Final_Telegram", "n8n-nodes-base.telegram", 1.2, [3680, 880], {
     "chatId": "={{ " + CFG + ".telegram_chat_id }}",
-    "text": "={{ (() => { const d = $('Preparar_Registro_Final').first().json; const icono = d.decision_humana === 'APROBAR' ? '✅' : (d.decision_humana === 'RECHAZAR' ? '⛔' : '⏰'); "
-            "return `${icono} VISIONGUARD · DECISIÓN HUMANA\\n📁 ${d.archivo}\\n👤 ${d.decision_humana} → ${d.estado}\\n🕒 ${d.fecha_decision_humana}\\n"
-            "📊 Panel: ${" + CFG + ".dashboard_url}`; })() }}",
+    "text": "={{ (() => { const h = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); const d = $('Preparar_Registro_Final').first().json; const icono = d.decision_humana === 'APROBAR' ? '✅' : (d.decision_humana === 'RECHAZAR' ? '⛔' : '⏰'); "
+            "return h(`${icono} VISIONGUARD · DECISIÓN HUMANA\\n📁 ${d.archivo}\\n👤 ${d.decision_humana} → ${d.estado}\\n🕒 ${d.fecha_decision_humana}\\n"
+            "📊 Panel: ${" + CFG + ".dashboard_url}`); })() }}",
     "additionalFields": {"appendAttribution": False}},
     credentials=CRED_TG, retryOnFail=True, onError="continueRegularOutput")
 conectar("Send a message2", "Notificacion_Final_Telegram")
@@ -398,6 +409,15 @@ for pos, wd, ht, color, texto in NOTAS:
     w["nodes"].append({"parameters": {"content": texto, "height": ht, "width": wd, "color": color},
                        "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": pos,
                        "id": uid(), "name": f"Nota {len(w['nodes'])}"})
+
+# Telegram: HTML (Markdown por defecto convertia "_" en cursiva); los textos se escapan con h()
+for _n in w["nodes"]:
+    if _n["type"] == "n8n-nodes-base.telegram" and not _n.get("disabled"):
+        _n["parameters"].setdefault("additionalFields", {})["parse_mode"] = "HTML"
+
+# Drive: reintentos (ejecucion 109 fallo por 403 RATE_LIMIT_EXCEEDED)
+for _nm in ["Search files and folders", "Search files and folders1", "Download file", "Mover_A_Procesadas"]:
+    N[_nm].update({"retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000})
 
 w["name"] = "VisionGuard v2.2 - Hito 2 FINAL"
 w.setdefault("settings", {})["timezone"] = "America/Santiago"  # turnos en hora de Chile
