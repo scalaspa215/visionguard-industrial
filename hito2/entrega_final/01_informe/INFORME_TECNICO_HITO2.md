@@ -289,7 +289,8 @@ El 36,5 % del equipo se conserva como escenario base. Como sus supuestos no esta
 - **Ejecuciones reales del v2.2** (14-nov-2026, con autorización del responsable):
   - **106:** carpeta vacía. Se enviaron el Gmail y el Telegram reales "sin pendientes". La API de ResNet18 respondió 503 por arranque en frío y el reintento a los 60 s funcionó. Hugging Face respondió 401 (credencial inválida) y se aplicó el respaldo por reglas.
   - **107:** dos imágenes reales, VG_TEST_021 (Defectuosa 91,78 %) y VG_TEST_020 (Defectuosa 74,08 %, alerta de confianza baja). GPT-4o mini real devolvió una respuesta validada sin cifras inventadas. Se enviaron Gmail y Telegram reales. Las decisiones humanas reales fueron RECHAZAR y APROBAR; quedaron registradas en Sheets con fecha, se notificaron por Gmail y Telegram y las imágenes se movieron a Procesadas.
-  - **108:** VG_TEST_022, Defectuosa 56,34 %.
+  - **108:** VG_TEST_022, Defectuosa 56,34 % (confianza baja). Respuesta del LLM validada. La decisión humana real fue APROBAR, que autoriza apartar e inspeccionar; quedó registrada y se notificó.
+  - En total hay **tres ejecuciones reales exitosas con datos distintos** (106, 107 y 108).
   - Ninguna imagen subida fue Correcta, así que el caso B2 real (pieza correcta) queda pendiente.
 
 ## 11. Limitaciones
