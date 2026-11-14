@@ -11,7 +11,7 @@ const N8N = path.join(__dirname, '..', 'n8n');
 const salida = [];
 const ok = (c, msg) => { salida.push((c ? 'OK    ' : 'FALLA ') + msg); return c; };
 
-for (const archivo of ['VisionGuard_v2.2_Hito2_IMPORTAR.json', 'VisionGuard_v2.2_Hito2_PUBLICO.json', 'VisionGuard_v2.2_Error_Handler_PUBLICO.json']) {
+for (const archivo of ['VisionGuard_v2.2_Hito2_IMPORTAR.json', 'VisionGuard_v2.2_Hito2_PUBLICO.json', 'VisionGuard_v2.2_Hito2_FINAL_vivo_PUBLICO.json', 'VisionGuard_v2.2_Error_Handler_PUBLICO.json']) {
   const texto = fs.readFileSync(path.join(N8N, archivo), 'utf8');
   const w = JSON.parse(texto);
   const nombres = new Set(w.nodes.map(n => n.name));
@@ -49,7 +49,7 @@ for (const archivo of ['VisionGuard_v2.2_Hito2_IMPORTAR.json', 'VisionGuard_v2.2
     } catch (e) { /* sin archivo IMPORTAR: solo patrones genericos */ }
     const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const prohibido = [/@gmail\.com/i, /"credentials"/, /sk-[A-Za-z0-9]{20,}/, /hf_[A-Za-z0-9]{20,}/,
-      /\d{8,10}:[A-Za-z0-9_-]{35}/, /BEGIN PRIVATE KEY/, /instanceId/, ...privados.map(p => new RegExp(esc(p)))];
+      /\d{8,10}:[A-Za-z0-9_-]{35}/, /BEGIN PRIV[A]TE KEY/, /instanceId/, ...privados.map(p => new RegExp(esc(p)))];
     const hallados = prohibido.filter(r => r.test(texto)).map(String);
     ok(hallados.length === 0, `${archivo}: sin credenciales ni datos personales ${hallados.join(', ')}`);
   }

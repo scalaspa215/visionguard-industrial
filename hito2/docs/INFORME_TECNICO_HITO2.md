@@ -276,7 +276,16 @@ El 36,5 % del equipo se conserva como escenario base. Como sus supuestos no esta
   - `/health` de ResNet18 responde `ok`;
   - `/pronosticos-demo` y `/pronosticar` del GRU responden;
   - se hicieron 162 llamadas para la evaluación.
-- **Pendiente de evidencia en n8n:** tres ejecuciones completas con imágenes distintas y capturas de Gmail y Telegram (guía en `docs/PLAN_PRUEBAS_Y_EVIDENCIAS.md`).
+- **Integración en n8n Cloud** (14-nov-2026; ejecuciones 100–105 del workflow v2.2): `test_workflow` corre en el motor real de n8n todos los nodos de lógica (Code JS y Python, If, Merge, Loop, Wait, Dedupe). Gmail, Telegram, Sheets, Drive, las APIs y el LLM reciben datos simulados, así que no se envió nada real.
+  - **Ejecución 100:** detectó un bug real. El runner Python nativo no tiene `hasattr`, así que `Clasificar_NLP_Python` fallaba y el Merge nunca completaba. Se corrigió en el workflow mediante MCP (versión `60e36d82`).
+  - **101 (B1 + B6):** pieza defectuosa, Hugging Face caído y rechazo humano.
+  - **102 (B3 + B8):** confianza baja, JSON del LLM inválido que activa el respaldo determinista, ruta Transformer y sin respuesta humana.
+  - **103 (B4):** carpeta vacía; llegan los avisos de turno sin pendientes.
+  - **104 (B9 parcial):** API caída; espera, reintento y alerta por Gmail y Telegram.
+  - **105 (B5 + B7):** archivo corrupto e imagen duplicada.
+  - Detalle de cada caso en `evidencias/ejecuciones_n8n/`.
+- **Ejecución real previa** (v2.1, ejecución 96, 13-nov-2026): imagen `VG_TEST_015.jpeg`, ResNet18 Defectuosa 99,49 %, GPT-4o mini real, Gmail y Telegram enviados, rechazo humano real registrado.
+- **Pendiente:** ejecuciones reales de la v2.2 con tres imágenes nuevas. Requieren autorizar envíos reales y subir las imágenes a Drive.
 
 ## 11. Limitaciones
 

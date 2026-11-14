@@ -6,17 +6,17 @@
 
 | Req. | Exigencia | Implementación v2.2 | Estado | Avance | Evidencia |
 |---|---|---|---|---|---|
-| R1 LLM | JSON estructurado con recomendación | GPT-4o mini con 11 claves; validación, corrección, anti-alucinación y respaldo | I, D (unitario) · P (ejecución en vivo) | 90 % | `n8n_nodes/validacion_seguridad_final.js`, pruebas A1 1–7 y 12 |
-| R2 Python | Código propio entregado | 2 APIs FastAPI + nodo Code Python en n8n + scripts de evaluación | I, D | 95 % | `python/apis/*`, `n8n_nodes/clasificar_nlp.py`, prueba A2 |
+| R1 LLM | JSON estructurado con recomendación | GPT-4o mini con 11 claves; validación, corrección, anti-alucinación y respaldo | I, D (unitario + n8n: ejec. 101 válido, 102 respaldo) · real en v2.1 (ejec. 96) | 92 % | `validacion_seguridad_final.js`; `evidencias/ejecuciones_n8n/T1`, `T2`, `R96` |
+| R2 Python | Código propio entregado | 2 APIs FastAPI + nodo Code Python en n8n + scripts de evaluación | I, D (nodo Python corrido en n8n: ejec. 101–102; bug `hasattr` hallado y corregido) | 97 % | `python/apis/*`, `n8n_nodes/clasificar_nlp.py`, `T0`/`T1`/`T2` |
 | R3 Serie | Pronóstico vs base simple; clásico vs DL | GRU vs 6 métodos clásicos con la misma partición; GRU vía API real; CUSUM | I, D | 90 % | `series/resultados_series.json` |
 | R4 Imágenes | 2 modelos preentrenados comparados | ResNet18 desplegado; notebook con EfficientNet-B0 y MobileNetV3 + McNemar | I · P (correr Colab) | 70 % | `notebooks/VisionGuard_Hito2_Comparaciones_Colab.ipynb` (A) |
-| R5 Transformer | Modelo de atención sobre texto industrial | MiniLM multilingüe + centroides en Python dentro del flujo; comparado con reglas (F1 0,347 vs 0,515: ganan las reglas, se discute) | I, D (offline) · P (token HF para el flujo) | 80 % | `nlp/resultados_nlp.json`; nodos `Embeddings_Transformer_HF` → `Clasificar_NLP_Python` |
-| R6 Automatización | Corre sola y termina en acción | Schedule por turno, 61 nodos, reintentos, rutas de error, Error Handler | I, D (estático) · P (E2E) | 85 % | prueba A3; `PLAN_PRUEBAS` B1–B9 |
+| R5 Transformer | Modelo de atención sobre texto industrial | MiniLM multilingüe + centroides en Python dentro del flujo; comparado con reglas (F1 0,347 vs 0,515: ganan las reglas, se discute) | I, D (offline MiniLM; rutas Transformer y respaldo por reglas en n8n: ejec. 101–102) · P (llamada real a HF) | 85 % | `nlp/resultados_nlp.json`; `T1`, `T2` |
+| R6 Automatización | Corre sola y termina en acción | Schedule por turno, 61 nodos, reintentos, rutas de error, Error Handler | I, D (n8n ejec. 101–105: B1, B3–B8 y B9 parcial con pin data) · P (ejecución programada real) | 90 % | `PLAN_PRUEBAS`, `evidencias/ejecuciones_n8n/` |
 | R7 Contexto | Usuario, decisión, indicador con línea base | Inspector, 3 opciones, tasa de defectos y escapes, línea base | I, D | 95 % | Informe §1 |
 | R8 Datos | Origen, limpieza, limitaciones | 3 fuentes documentadas, generadores reproducibles, 8 reglas de validación | I, D | 95 % | Informe §2, `generar_reportes_nc.py` |
-| R9 Tablero | Interactivo y publicado; enlace en avisos | Dashboard en Sheets (filtros + 9 gráficos + log LLM) y Colab; enlace en todos los avisos | I · P (instalar y compartir) | 75 % | `dashboard/VisionGuard_Dashboard_Sheets.gs` |
+| R9 Tablero | Interactivo y publicado; enlace en avisos | Dashboard en Sheets (filtros + 9 gráficos + log LLM) y Colab; enlace en todos los avisos | I (instalado por el equipo, `#gid=133025830` en Config) · P (compartir con el profesor; no inspeccionado por mí) | 85 % | `dashboard/VisionGuard_Dashboard_Sheets.gs`, nodo Config |
 | R10 Negocio y ética | ROI, riesgos, control humano | 3 escenarios, sensibilidad, recuperación; 7 riesgos mitigados; aprobación por pieza con timeout | I, D | 90 % | `negocio/roi_resultados.json`, Informe §8–9 |
-| R11 Notificaciones | Gmail **siempre** + Telegram | Gmail y Telegram en informe, sin pendientes, API caída, decisión final y errores | I · P (capturas) | 85 % | nodos `Notificacion_*`, `Aviso_*`, `Telegram_API_Caida` |
+| R11 Notificaciones | Gmail **siempre** + Telegram | Gmail y Telegram en informe, sin pendientes, API caída, decisión final y errores | I, D (rutas ejecutadas en n8n, envíos simulados) · real en v2.1 (ejec. 96) · P (capturas v2.2) | 88 % | `T1`–`T4`, `R96` |
 
 ## Retroalimentación del Hito 1 → acción
 
@@ -34,20 +34,20 @@
 
 | Componente | Peso | Avance hoy | Si se completan los pendientes |
 |---|---|---|---|
-| Integración técnica (R3–R6) | 25 % | 75 % | 95 % |
+| Integración técnica (R3–R6) | 25 % | 85 % | 95 % |
 | Calidad de modelos y comparación | 15 % | 80 % | 95 % |
 | LLM, RAG/contexto, alucinaciones | 15 % | 85 % | 95 % |
-| Tablero | 10 % | 70 % | 95 % |
+| Tablero | 10 % | 85 % | 95 % |
 | Negocio, ROI, riesgos, control humano | 15 % | 90 % | 95 % |
 | Informe final | 10 % | 85 % | 95 % |
 | Defensa | 10 % | 50 % (guion listo) | depende del equipo |
-| **Global ponderado** | 100 % | **≈ 78 %** | **≈ 95 %** |
+| **Global ponderado** | 100 % | **≈ 82 %** | **≈ 95 %** |
 
 ## Pendientes que requieren intervención humana (en orden)
 1. Revocar la clave de servicio de Google Cloud expuesta.
-2. Importar la v2.2 y el Error Handler, asignar credenciales y crear el token de Hugging Face.
-3. Instalar el Apps Script, pegar la URL del tablero en Config y compartir la hoja con el profesor (Lector).
+2. ~~Importar la v2.2 y el Error Handler, credenciales y token HF~~ — hecho (14-nov; verificado vía MCP).
+3. ~~Instalar el Apps Script y pegar la URL en Config~~ — hecho (`dashboard_url` = `#gid=133025830`). Falta compartir la hoja con el profesor como Lector.
 4. Ejecutar el notebook de Colab (parte A, imágenes) y pegar sus cifras en el informe §4.1. La parte B (NLP) ya se ejecutó localmente.
-5. Ejecutar B1–B3 (y ojalá B4–B9) con capturas de n8n, Gmail, Telegram y Sheets.
-6. Subir la carpeta `hito2/` a GitHub (lo prepara este paquete; requiere tu autorización).
+5. Ejecuciones reales B1–B3 con correo y Telegram reales (requieren autorización y capturas). Las pruebas de integración con datos simulados ya corrieron en n8n (ver `evidencias/`).
+6. ~~Subir `hito2/` a GitHub~~ — hecho.
 7. Ensayar el guion con cada integrante: hay preguntas individuales.

@@ -1,0 +1,128 @@
+[
+  {
+    "caso": "1 Pieza defectuosa + LLM valido",
+    "ok": true,
+    "detalle": {
+      "fuente": "LLM_VALIDADO",
+      "alertas": [
+        "PIEZA_DEFECTUOSA",
+        "INCONSISTENCIA_API",
+        "DISCREPANCIA_MODELOS_SERIE",
+        "PRONOSTICO_SOBRE_UMBRAL"
+      ],
+      "clave": "INTEGRADO|VG_T1.jpeg|2026-11-14"
+    }
+  },
+  {
+    "caso": "2 Pieza correcta alta confianza, LLM pone prioridad baja (permitido)",
+    "ok": true,
+    "detalle": {
+      "prioridad": "baja",
+      "fuente": "LLM_VALIDADO"
+    }
+  },
+  {
+    "caso": "3 LLM intenta aprobar automaticamente y baja prioridad con defecto -> corregido",
+    "ok": true,
+    "detalle": [
+      "pieza defectuosa: prioridad -> alta",
+      "aprobacion_automatica -> false",
+      "requiere_revision_humana -> true"
+    ]
+  },
+  {
+    "caso": "4 JSON invalido del LLM -> respaldo determinista",
+    "ok": true,
+    "detalle": {
+      "fallas": [
+        "JSON invalido del LLM."
+      ],
+      "diag": "Analisis de respaldo (sin LLM valido). ResNet18: 1 imagen(es), 1 defectuosa(s): VG_T4.jpeg Defectuosa (97.00 %). GRU sim"
+    }
+  },
+  {
+    "caso": "5 Nodo LLM con error tras reintentos -> respaldo",
+    "ok": true,
+    "detalle": [
+      "Nodo LLM con error: 429 rate limit",
+      "El LLM no entrego contenido."
+    ]
+  },
+  {
+    "caso": "6 Alucinacion numerica: cifra inventada",
+    "ok": true,
+    "detalle": [
+      "37",
+      "1250"
+    ]
+  },
+  {
+    "caso": "7 Frase de aprobacion sin negacion",
+    "ok": true,
+    "detalle": [
+      "do: L3 7.89 %. La pieza queda aprobada"
+    ]
+  },
+  {
+    "caso": "8 Sin imagenes validas -> Integracion devuelve 0 items (sin error)",
+    "ok": true,
+    "detalle": "items=0"
+  },
+  {
+    "caso": "9 Imagen corrupta (error API) + otra valida",
+    "ok": true,
+    "detalle": [
+      "DISCREPANCIA_MODELOS_SERIE",
+      "PRONOSTICO_SOBRE_UMBRAL",
+      "ERROR_INFERENCIA_IMAGEN"
+    ]
+  },
+  {
+    "caso": "10 NLP no disponible -> alerta y flujo sigue",
+    "ok": true,
+    "detalle": "sin_datos"
+  },
+  {
+    "caso": "11 Dos imagenes -> dos filas con claves distintas y alertas por imagen",
+    "ok": true,
+    "detalle": [
+      "INTEGRADO|A.jpeg|2026-11-14",
+      "INTEGRADO|B.jpeg|2026-11-14",
+      "DISCREPANCIA_MODELOS_SERIE: Linea L2: GRU 6.48 % vs promedio movil 8.05 % | PRONOSTICO_SOBRE_UMBRAL: Linea L3: GRU 7.89 % >= 7.5 % (simulado)"
+    ]
+  },
+  {
+    "caso": "12 Respuesta envuelta en ```json``` se acepta",
+    "ok": true,
+    "detalle": "LLM_VALIDADO"
+  },
+  {
+    "caso": "13 Preparar NLP descarta fila vacia y duplicado",
+    "ok": true,
+    "detalle": [
+      "(sin id)",
+      "NC-006 (duplicado)"
+    ]
+  },
+  {
+    "caso": "14 NLP JS con embeddings sinteticos produce metricas",
+    "ok": true,
+    "detalle": {
+      "transformer": {
+        "n": 40,
+        "accuracy": 0.275,
+        "f1_macro": 0.2529
+      },
+      "reglas": {
+        "n": 40,
+        "accuracy": 0.425,
+        "f1_macro": 0.5154
+      }
+    }
+  },
+  {
+    "caso": "15 NLP sin token HF -> solo reglas",
+    "ok": true,
+    "detalle": "HTTP: 401 Unauthorized"
+  }
+]

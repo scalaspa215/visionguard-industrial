@@ -25,14 +25,10 @@ TILDES = str.maketrans("áéíóúüñÁÉÍÓÚÜÑ", "aeiouunaeiouun")
 
 
 def leer_entrada():
-    """Compatible con el runner nativo (_items) y con el antiguo Pyodide (_input)."""
-    try:
-        datos = _items  # noqa: F821  (variable inyectada por n8n)
-    except NameError:
-        datos = _input.all()  # noqa: F821
-    item = datos[0]
-    j = item["json"] if isinstance(item, dict) else item.json
-    return j.to_py() if hasattr(j, "to_py") else j
+    """Runner Python nativo de n8n: `_items` es una lista de dicts {"json": {...}}.
+    Ojo: el sandbox restringe builtins (p. ej. `hasattr` no existe; verificado
+    en la ejecucion 100 de n8n), por eso no se usan hasattr/isinstance."""
+    return _items[0]["json"]  # noqa: F821  (variable inyectada por n8n)
 
 
 def por_reglas(texto):

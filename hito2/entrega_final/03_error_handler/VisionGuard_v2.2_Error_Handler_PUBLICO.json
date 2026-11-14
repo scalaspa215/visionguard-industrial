@@ -1,0 +1,76 @@
+{
+  "name": "VisionGuard v2.2 - Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "617da2e6-3aa2-446d-afe6-67d11b3d1f14",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "sendTo": "responsable.calidad@ejemplo.com",
+        "subject": "={{ '🚨 VisionGuard | Falla del flujo en ' + ($json.execution.lastNodeExecuted || 'nodo desconocido') }}",
+        "message": "={{ `<h2>VisionGuard | Error de ejecución</h2><p><b>Workflow:</b> ${$json.workflow.name}</p><p><b>Nodo:</b> ${$json.execution.lastNodeExecuted}</p><p><b>Mensaje:</b> ${String($json.execution.error?.message ?? '').slice(0, 500)}</p><p><b>Ejecución:</b> <a href=\"${$json.execution.url}\">${$json.execution.id}</a></p><p>No se generaron aprobaciones automáticas. Revise el flujo y vuelva a ejecutar.</p>` }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        -80
+      ],
+      "id": "fa4fa7cd-1dd7-4f63-a1d7-d1bffbd2968a",
+      "name": "Gmail_Error",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "chatId": "TU_TELEGRAM_CHAT_ID",
+        "text": "={{ '🚨 VisionGuard: falla en ' + $json.execution.lastNodeExecuted + '\\n' + String($json.execution.error?.message ?? '').slice(0, 300) }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        80
+      ],
+      "id": "d5c25b76-e791-47a8-aaf4-8d1a8fb21a54",
+      "name": "Telegram_Error",
+      "retryOnFail": true
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Gmail_Error",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Telegram_Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
