@@ -153,8 +153,25 @@ else:
         try:
             raw = google_data()
             st.sidebar.success('Conectado a Google Sheets')
-        except Exception:
-            st.sidebar.error('No se pudo conectar a Sheets. Comprueba los Secrets y permisos.')
+        except Exception as exc:
+            # No mostramos el mensaje crudo de la excepción: podría revelar
+            # detalles internos de credenciales o solicitudes.
+            error_tipo = type(exc).__name__
+            st.sidebar.error(f'Error de conexión con Google Sheets: {error_tipo}')
+            if error_tipo == 'SpreadsheetNotFound':
+                st.sidebar.info('Comprueba el ID de la hoja y que esté compartida con la cuenta de servicio como Lector.')
+            elif error_tipo == 'WorksheetNotFound':
+                st.sidebar.info('Comprueba que la pestaña se llame exactamente Analisis_Integrado.')
+            elif error_tipo in ('MalformedError', 'ValueError', 'InvalidValueError'):
+                st.sidebar.info('Revisa el campo private_key dentro de Streamlit Secrets. Conserva las marcas BEGIN/END y los saltos de línea codificados como \\n.')
+            elif error_tipo == 'APIError':
+                status = getattr(getattr(exc, 'response', None), 'status_code', None)
+                if status is not None:
+                    st.sidebar.info(f'Google API respondió HTTP {status}. Revisa los permisos y que Sheets API esté habilitada.')
+                else:
+                    st.sidebar.info('Revisa el acceso de la cuenta de servicio y la habilitación de Sheets API.')
+            else:
+                st.sidebar.info('Verifica la clave JSON de la cuenta de servicio y los permisos de lectura de la hoja.')
 
 if st.sidebar.button('🔄 Actualizar datos'):
     st.cache_data.clear()
