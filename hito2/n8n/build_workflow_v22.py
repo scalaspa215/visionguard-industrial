@@ -400,6 +400,7 @@ for pos, wd, ht, color, texto in NOTAS:
                        "id": uid(), "name": f"Nota {len(w['nodes'])}"})
 
 w["name"] = "VisionGuard v2.2 - Hito 2 FINAL"
+w.setdefault("settings", {})["timezone"] = "America/Santiago"  # turnos en hora de Chile
 w["active"] = False
 w["pinData"] = {}
 for k in ("id", "versionId"):

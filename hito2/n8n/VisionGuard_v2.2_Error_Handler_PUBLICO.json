@@ -9,7 +9,7 @@
         0,
         0
       ],
-      "id": "617da2e6-3aa2-446d-afe6-67d11b3d1f14",
+      "id": "0097cab9-ddba-4b35-95f2-e93dbb56e8ba",
       "name": "Error Trigger"
     },
     {
@@ -27,7 +27,7 @@
         240,
         -80
       ],
-      "id": "fa4fa7cd-1dd7-4f63-a1d7-d1bffbd2968a",
+      "id": "977c7b67-0f63-4a9e-b724-dd894da0d6ab",
       "name": "Gmail_Error",
       "retryOnFail": true
     },
@@ -45,7 +45,7 @@
         240,
         80
       ],
-      "id": "d5c25b76-e791-47a8-aaf4-8d1a8fb21a54",
+      "id": "f24556bc-0932-4a8c-aa9b-b947d466ecb1",
       "name": "Telegram_Error",
       "retryOnFail": true
     }

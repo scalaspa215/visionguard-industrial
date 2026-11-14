@@ -27,7 +27,10 @@
 | B9 (parcial) | 104 | I | `/health` 503 dos veces | Espera de 60 s, luego Gmail + Telegram "API no disponible" | Coincide | `T4_exec104_*.md` | Verificado (I). El disparo real del Error Handler requiere una ejecución de producción |
 | B5 + B7 | 105 | I | 1 archivo corrupto (400) + la misma imagen de T1 el mismo día | Alerta `ERROR_INFERENCIA_IMAGEN`; la deduplicación descarta la repetida, sin 2.º registro ni aviso | Coincide: el archivo corrupto se aísla; el duplicado se descarta antes de Sheets | `T5_exec105_*.md` | Verificado (I) |
 | R-1 | 96 (v2.1) | R | `VG_TEST_015.jpeg` real | Flujo integrado completo con decisión humana real | Defectuosa 99,49 %, LLM real, Gmail + Telegram enviados, rechazo humano real a las 21:40:49Z | `R96_v21_exec96_real.md` | Verificado (R, versión v2.1) |
-| B1–B3 reales v2.2 | — | R | 3 imágenes reales nuevas | Correo, Telegram y aprobación reales | — | — | **Pendiente: requiere autorización de envío y subir 3 imágenes** |
+| B4 real + reintento | 106 (v2.2) | R | Carpeta real vacía; Render en arranque en frío | Reintento tras 503, aviso real "sin pendientes" | 503 → espera de 60 s → ok; Gmail y Telegram reales enviados; Hugging Face respondió 401 → respaldo por reglas | `R106_*.md` | Verificado (R) · credencial HF inválida |
+| B1 + B3 reales | 107 (v2.2) | R | `VG_TEST_021.jpeg` y `VG_TEST_020.jpeg` (imágenes reales) | 2 informes, 2 aprobaciones, registro y avisos finales | Defectuosa 91,78 % y Defectuosa 74,08 % (`CONFIANZA_BAJA`); LLM real `LLM_VALIDADO` sin cifras inventadas; Gmail y Telegram reales; **RECHAZAR** y **APROBAR** humanos registrados en Sheets; imágenes movidas a Procesadas | `R107_*.md` | Verificado (R) |
+| 3.ª ejecución real | 108 (v2.2) | R | `VG_TEST_022.jpeg` | Igual que la anterior | ResNet18: Defectuosa 56,34 % (muy incierta) | `R108_*.md` | ver archivo |
+| B2 real (pieza correcta) | — | R | Imagen `ok_front` | Prioridad baja/media, igual pide validación | — | — | Pendiente: las 3 imágenes subidas fueron clasificadas como defectuosas |
 
 ## C. Seguridad (no negociable)
 - Ninguna prueba aprueba como liberada una pieza Defectuosa. Aprobar solo autoriza la **acción de inspección**.
